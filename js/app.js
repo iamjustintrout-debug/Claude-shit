@@ -24,7 +24,10 @@ const DEFAULT_STATE = {
   batches: {}, // kitId -> { mixKey, mixedOn: 'YYYY-MM-DD', rolls }
   kitMeta: {}, // kitId -> { openedOn, portionUsed }
   customFilms: [], // film names typed in with "Other"
-  prefs: { mixKey: {}, opts: {}, rotary: false, tankMl: 500, agit: 'kit', film: {}, format: '35mm' },
+  prefs: {
+    mixKey: {}, opts: {}, rotary: false, tankMl: 500, agit: 'kit', film: {}, format: '35mm',
+    alarm: true, beeps: true, miniTimer: true,
+  },
 };
 
 // v1 only knew the C-TEC kit and kept its batch at the top level.
@@ -595,7 +598,7 @@ function startTimer() {
     if (a?.continuous) setCue(a.label?.startsWith('Rotate') ? 'Rotate continuously' : 'Agitate continuously');
     else if (a?.initial) setCue(`Agitate continuously for ${a.initial} s`);
     else if (a) setCue(`${a.cue ?? 'Agitate'} now, then at each beep`);
-    beep(660, 120);
+    cueBeep(660, 120);
   }
   tick();
 }
@@ -617,7 +620,7 @@ function tick() {
       run.lastCue = due;
       persistRun();
       setCue(a.cue ?? 'Agitate');
-      beep(880, 120); vibrate(150);
+      cueBeep(880, 120); vibrate(150);
     } else if (!run.midShown && a.initial && elapsed >= a.initial && due === -1) {
       run.midShown = true;
       setCue('Stop. Wait for the next beep');
@@ -627,7 +630,7 @@ function tick() {
     run.warned = true;
     persistRun();
     setCue('10 s left. Get ready to drain');
-    beep(880, 100, 2); vibrate([100, 80, 100]);
+    cueBeep(880, 100, 2); vibrate([100, 80, 100]);
   }
   if (run.remaining <= 0) return finishStep();
   run.timer = setTimeout(tick, 200);
@@ -637,7 +640,7 @@ function finishStep(silent = false) {
   run.phase = 'ended';
   persistRun();
   setClock(0, 1, 'done');
-  if (!silent) { beep(1046, 400, 3); vibrate([300, 150, 300, 150, 300]); }
+  if (!silent) startAlarm();
   const last = run.idx === run.steps.length - 1;
   setCue(last ? 'Done. Drain the tank' : 'Drain the tank');
   $('#run-pause').hidden = true;
@@ -646,6 +649,7 @@ function finishStep(silent = false) {
 }
 
 function advance() {
+  stopAlarm();
   clearTimeout(run.timer);
   if (run.idx === run.steps.length - 1) return finishRun();
   run.idx += 1;
@@ -697,6 +701,7 @@ function finishRun() {
 function endRun() {
   if (run) clearTimeout(run.timer);
   run = null;
+  stopAlarm();
   persistRun();
   stopTilt();
   keepAwake(false);
@@ -759,7 +764,7 @@ function miniState() {
 function updateMini() {
   const m = $('#mini');
   const st = miniState();
-  const show = !!st && activeTab !== 'develop';
+  const show = !!st && activeTab !== 'develop' && state.prefs.miniTimer;
   if (show && m.hidden) { m.classList.remove('pulse'); m.classList.add('enter'); }
   m.hidden = !show;
   document.documentElement.style.setProperty('--mini-h', show ? (miniCollapsed ? '40px' : '70px') : '0px');
@@ -899,6 +904,52 @@ function beep(freq = 880, ms = 150, count = 1) {
 
 function vibrate(pattern) {
   try { navigator.vibrate?.(pattern); } catch { /* unsupported */ }
+}
+
+// Short beeps for agitation, start and the 10-second warning.
+function cueBeep(...args) {
+  if (state.prefs.beeps) beep(...args);
+}
+
+// End-of-step alarm: bursts of a two-tone chirp that repeat until you tap
+// the screen, move on, or a minute passes.
+const alarm = { timer: 0, stopAt: 0 };
+function alarmBurst() {
+  if (!audio) return;
+  const t0 = audio.currentTime;
+  for (let i = 0; i < 4; i++) {
+    const start = t0 + i * 0.16;
+    const osc = audio.createOscillator();
+    const gain = audio.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(i % 2 ? 1568 : 1319, start);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.18, start + 0.01);
+    gain.gain.setValueAtTime(0.18, start + 0.1);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.13);
+    osc.connect(gain).connect(audio.destination);
+    osc.start(start);
+    osc.stop(start + 0.15);
+  }
+}
+function startAlarm(maxMs = 60000) {
+  stopAlarm();
+  vibrate([400, 150, 400, 150, 400]);
+  if (!state.prefs.alarm) return;
+  alarmBurst();
+  alarm.stopAt = Date.now() + maxMs;
+  alarm.timer = setInterval(() => {
+    if (Date.now() > alarm.stopAt) return stopAlarm();
+    alarmBurst();
+    vibrate([400, 150, 400]);
+  }, 1300);
+  // Any tap silences it (on the next tick, so the tap that starts a test isn't counted).
+  setTimeout(() => document.addEventListener('pointerdown', stopAlarm, { once: true, capture: true }), 0);
+}
+function stopAlarm() {
+  clearInterval(alarm.timer);
+  alarm.timer = 0;
+  document.removeEventListener('pointerdown', stopAlarm, { capture: true });
 }
 
 let wakeLock = null;
@@ -1239,12 +1290,28 @@ function setUnits(temp, vol) {
 }
 
 function renderSettings() {
+  $('#set-alarm').checked = state.prefs.alarm;
+  $('#set-beeps').checked = state.prefs.beeps;
+  $('#set-mini').checked = state.prefs.miniTimer;
   segmented($('#set-temp'), ['C', 'F'], state.tempUnit, (u) => (u === 'C' ? '°C' : '°F'), (u) => setUnits(u, null),
     (u) => (u === 'C' ? 'Celsius' : 'Fahrenheit'));
   segmented($('#set-vol'), ['ml', 'oz'], state.volUnit, (u) => (u === 'ml' ? 'ml' : 'fl oz'), (u) => setUnits(null, u),
     (u) => (u === 'ml' ? 'Millilitres' : 'US fluid ounces'));
   $('#set-example').textContent = `Example: mix ${V(200)} of developer, process at ${T({ c: 38, f: 100 })}.`;
 }
+for (const [id, key] of [['#set-alarm', 'alarm'], ['#set-beeps', 'beeps'], ['#set-mini', 'miniTimer']]) {
+  $(id).addEventListener('change', (e) => {
+    state.prefs[key] = e.currentTarget.checked;
+    save();
+    if (key === 'alarm' && !state.prefs.alarm) stopAlarm();
+    updateMini();
+  });
+}
+$('#set-test-alarm').addEventListener('click', () => {
+  unlockAudio();
+  if (!state.prefs.alarm) return alert('The alarm is turned off. Switch it on to hear it.');
+  startAlarm(4000);
+});
 $('#set-all-metric').addEventListener('click', () => setUnits('C', 'ml'));
 $('#set-all-imperial').addEventListener('click', () => setUnits('F', 'oz'));
 

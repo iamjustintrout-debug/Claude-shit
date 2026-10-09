@@ -33,7 +33,8 @@ Pick your chemistry at the top, and the whole app follows it:
   - Search, filter, edit or delete entries, and add past rolls by hand.
   - Export it as a CSV spreadsheet or a backup file, and import the backup on another device.
 - **Guide:** processing notes, keeping times and troubleshooting for the selected kit.
-- **Settings** (gear, top right): choose °C or °F and ml or fl oz independently, or switch all at once.
+- **Settings** (gear, top right): choose °C or °F and ml or fl oz independently; turn the end-of-step
+  alarm, agitation beeps and floating timer on or off.
 
 Steps marked **check sheet** are the least certain. Always follow the sheet that came with your kit.
 Data is stored only on your device, and the app works offline once loaded.
