@@ -179,8 +179,27 @@ label.check input { width: 22px; height: 22px; margin: 0; accent-color: var(--vi
 .program li[role="button"]:active { background: var(--violet-dim); }
 .program .play { margin-left: 8px; font-size: 12px; color: var(--violet-bright); }
 .cue { min-height: 3em; font-size: 20px; font-weight: 600; color: var(--accent); }
-.cue.flash { animation: flash .6s ease-out; }
-@keyframes flash { from { background: var(--accent); color: var(--accent-text); } to { background: transparent; } }
+.cue { border-radius: 14px; padding: 6px 10px; }
+.cue.flash { animation: cue-pop .9s cubic-bezier(.3, 1.5, .5, 1); }
+@keyframes cue-pop {
+  0% { transform: scale(.9); background: var(--accent); color: var(--accent-text); }
+  25% { transform: scale(1.12); background: var(--accent); color: var(--accent-text); }
+  100% { transform: scale(1); background: transparent; }
+}
+
+/* Full-screen cue flash */
+#flash { position: fixed; inset: 0; z-index: 40; pointer-events: none; opacity: 0; }
+#flash.flash-agitate { background: radial-gradient(circle at 50% 45%, rgba(255, 184, 28, .9), rgba(255, 184, 28, .55)); animation: screen-flash .45s ease-out 2; }
+#flash.flash-warn { background: radial-gradient(circle at 50% 45%, rgba(218, 41, 28, .85), rgba(218, 41, 28, .5)); animation: screen-flash .4s ease-out 3; }
+#flash.flash-end { background: radial-gradient(circle at 50% 45%, rgba(218, 41, 28, .95), rgba(218, 41, 28, .6)); animation: screen-flash .5s ease-in-out 6; }
+@keyframes screen-flash { 0% { opacity: 0; } 25% { opacity: 1; } 100% { opacity: 0; } }
+/* Gentler for reduced motion, but still visible */
+@media (prefers-reduced-motion: reduce) {
+  #flash.flash-agitate, #flash.flash-warn, #flash.flash-end { animation: screen-flash 1s ease-out 1; }
+  .cue.flash { animation: cue-fade 1.2s ease-out; }
+}
+@keyframes cue-fade { from { background: var(--accent); color: var(--accent-text); } to { background: transparent; }
+}
 .run-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 16px 0; }
 
 /* Batch */

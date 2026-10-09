@@ -346,7 +346,8 @@ function effectiveAgitation(step) {
   if (kit().rotary && state.prefs.rotary) return { continuous: true, label: 'Rotate continuously' };
   const a = state.prefs.agit;
   if (a === 'off') return null;
-  if (a === 'kit') return step.agitation ?? null;
+  // Kits whose sheet gives no pattern still get reminders: 30 s, then every 30 s.
+  if (a === 'kit') return step.agitation ?? { initial: 30, every: 30, cue: 'Agitate' };
   return { initial: 0, every: Number(a), cue: 'Agitate' };
 }
 
@@ -632,6 +633,16 @@ function renderStep() {
   $('#run-next').textContent = next ? `Next: ${next.name}${next.manual ? '' : ` (${formatDuration(next.sec)})`}` : 'Last step';
 }
 
+// Full-screen colour flash so cues are visible from across the darkroom:
+// yellow to agitate, red for the 10-second warning and the end of a step.
+function screenFlash(kind) {
+  const f = $('#flash');
+  f.className = '';
+  void f.offsetWidth;
+  f.className = `flash-${kind}`;
+}
+$('#flash').addEventListener('animationend', (e) => { e.currentTarget.className = ''; });
+
 function setCue(text, flash = true) {
   const c = $('#run-cue');
   c.textContent = text;
@@ -656,7 +667,7 @@ function startTimer() {
     if (a?.continuous) setCue(a.label?.startsWith('Rotate') ? 'Rotate continuously' : 'Agitate continuously');
     else if (a?.initial) setCue(`Agitate continuously for ${a.initial} s`);
     else if (a) setCue(`${a.cue ?? 'Agitate'} now, then at each beep`);
-    cueBeep(660, 120);
+    cueBeep(784, 160, 1, 'square', 0.2);
   }
   tick();
 }
@@ -678,7 +689,8 @@ function tick() {
       run.lastCue = due;
       persistRun();
       setCue(a.cue ?? 'Agitate');
-      cueBeep(880, 120); vibrate(150);
+      agitationChirp(); vibrate(150);
+      screenFlash('agitate');
     } else if (!run.midShown && a.initial && elapsed >= a.initial && due === -1) {
       run.midShown = true;
       setCue('Stop. Wait for the next beep');
@@ -688,7 +700,8 @@ function tick() {
     run.warned = true;
     persistRun();
     setCue('10 s left. Get ready to drain');
-    cueBeep(880, 100, 2); vibrate([100, 80, 100]);
+    cueBeep(988, 140, 3, 'square', 0.22); vibrate([100, 80, 100]);
+    screenFlash('warn');
   }
   if (run.remaining <= 0) return finishStep();
   run.timer = setTimeout(tick, 200);
@@ -698,7 +711,7 @@ function finishStep(silent = false) {
   run.phase = 'ended';
   persistRun();
   setClock(0, 1, 'done');
-  if (!silent) startAlarm();
+  if (!silent) { startAlarm(); screenFlash('end'); }
   const last = run.idx === run.steps.length - 1;
   setCue(last ? 'Done. Drain the tank' : 'Drain the tank');
   $('#run-pause').hidden = true;
@@ -939,25 +952,64 @@ function unlockAudio() {
     // iOS: play through the silent switch.
     if (navigator.audioSession) navigator.audioSession.type = 'playback';
     audio ??= new (window.AudioContext || window.webkitAudioContext)();
-    audio.resume();
+    if (audio.state !== 'running') audio.resume().catch(() => {});
+    // iOS unlocks audio only when something actually plays during a tap.
+    const b = audio.createBuffer(1, 1, 22050);
+    const src = audio.createBufferSource();
+    src.buffer = b;
+    src.connect(audio.destination);
+    src.start(0);
   } catch { /* no audio */ }
 }
 
-function beep(freq = 880, ms = 150, count = 1) {
-  if (!audio) return;
-  const t0 = audio.currentTime;
+// iOS can suspend ("interrupt") the audio context when the screen dims, a call
+// comes in or another app plays sound. Wake it before every sound.
+function audioReady() {
+  if (!audio) return false;
+  if (audio.state !== 'running') audio.resume().catch(() => {});
+  return true;
+}
+
+// Any tap keeps the audio unlocked for the rest of the run.
+document.addEventListener('pointerdown', () => { if (run || audio) unlockAudio(); }, { passive: true, capture: true });
+
+function beep(freq = 880, ms = 150, count = 1, type = 'sine', vol = 0.5) {
+  if (!audioReady()) return;
+  const t0 = audio.currentTime + 0.03;
   for (let i = 0; i < count; i++) {
     const start = t0 + i * (ms + 100) / 1000;
     const osc = audio.createOscillator();
     const gain = audio.createGain();
+    osc.type = type;
     osc.frequency.value = freq;
     gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime(0.4, start + 0.01);
+    gain.gain.exponentialRampToValueAtTime(vol, start + 0.01);
+    gain.gain.setValueAtTime(vol, start + ms / 1000 * 0.7);
     gain.gain.exponentialRampToValueAtTime(0.0001, start + ms / 1000);
     osc.connect(gain).connect(audio.destination);
     osc.start(start);
     osc.stop(start + ms / 1000 + 0.02);
   }
+}
+
+// Agitation: a bright rising two-tone chirp, played twice so it cuts through.
+function agitationChirp() {
+  if (!state.prefs.beeps || !audioReady()) return;
+  const t0 = audio.currentTime + 0.03;
+  [[1047, 0], [1568, 0.11], [1047, 0.32], [1568, 0.43]].forEach(([f, dt]) => {
+    const start = t0 + dt;
+    const osc = audio.createOscillator();
+    const gain = audio.createGain();
+    osc.type = 'square';
+    osc.frequency.value = f;
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.22, start + 0.008);
+    gain.gain.setValueAtTime(0.22, start + 0.08);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.1);
+    osc.connect(gain).connect(audio.destination);
+    osc.start(start);
+    osc.stop(start + 0.11);
+  });
 }
 
 function vibrate(pattern) {
@@ -973,7 +1025,7 @@ function cueBeep(...args) {
 // the screen, move on, or a minute passes.
 const alarm = { timer: 0, stopAt: 0 };
 function alarmBurst() {
-  if (!audio) return;
+  if (!audioReady()) return;
   const t0 = audio.currentTime;
   for (let i = 0; i < 4; i++) {
     const start = t0 + i * 0.16;
