@@ -114,7 +114,7 @@ function showTab(name) {
   activeTab = name;
   try { sessionStorage.setItem(TAB_KEY, name); } catch { /* ignore */ }
   document.querySelectorAll('.tab').forEach((t) => { t.hidden = t.dataset.tab !== name; });
-  document.querySelectorAll('.tabs button, .home-btn, .gear-btn').forEach((b) => b.classList.toggle('active', b.dataset.go === name));
+  document.querySelectorAll('.tabs button, .icon-btn').forEach((b) => b.classList.toggle('active', b.dataset.go === name));
   $('.home-btn').setAttribute('aria-current', name === 'home' ? 'page' : 'false');
   moveTabIndicator();
   updateMini();
@@ -122,6 +122,7 @@ function showTab(name) {
   if (name === 'home') renderHome();
   if (name === 'settings') renderSettings();
   $('.gear-btn').setAttribute('aria-current', name === 'settings' ? 'page' : 'false');
+  $('.guide-btn').setAttribute('aria-current', name === 'guide' ? 'page' : 'false');
   if (name === 'batch') renderBatch();
   if (name === 'rolls') renderRolls();
   if (name === 'develop' && !run) syncDevFromBatch();
@@ -133,7 +134,7 @@ document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click'
 let indicatorTab = null;
 function moveTabIndicator() {
   const ind = $('.tab-indicator');
-  const btn = document.querySelector(`.tabs button[data-go="${activeTab}"]`);
+  const btn = document.querySelector(`.tabs .tab-btn[data-go="${activeTab}"]`);
   if (!btn) { ind.classList.remove('on'); indicatorTab = null; return; }
   const moved = indicatorTab && indicatorTab !== activeTab;
   ind.style.width = `${btn.offsetWidth}px`;
@@ -152,7 +153,7 @@ $('.home-btn').addEventListener('click', (e) => {
   void b.offsetWidth; // restart the animation
   b.classList.add('pop');
 });
-$('.home-btn').addEventListener('animationend', (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.remove('pop'); });
+$('.home-btn').addEventListener('animationend', (e) => { if (e.target.classList.contains('home-disc')) e.currentTarget.classList.remove('pop'); });
 
 function segmented(container, values, current, label, onPick, sub) {
   container.replaceChildren(...values.map((v) => {

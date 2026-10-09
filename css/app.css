@@ -229,26 +229,6 @@ label textarea { resize: vertical; }
 .file-btn { cursor: pointer; }
 
 /* Home button & dashboard */
-.brand { display: flex; align-items: center; gap: 12px; }
-.home-btn {
-  display: grid; place-items: center;
-  width: 44px; height: 44px; padding: 0;
-  border: 2px solid var(--yellow); border-radius: 12px;
-  background: transparent; color: var(--yellow);
-  cursor: pointer;
-  transition: background-color .25s ease, color .25s ease, box-shadow .25s ease;
-  -webkit-tap-highlight-color: transparent;
-}
-.home-btn svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; transition: fill .25s ease; }
-.home-btn:active { transform: scale(.88); }
-/* On the dashboard: filled. Elsewhere: outlined. */
-.home-btn.active { background: var(--yellow); color: var(--red); box-shadow: 0 0 0 4px rgba(255, 184, 28, .2); }
-.home-btn.active svg { fill: currentColor; }
-.home-btn.pop { animation: home-pop .45s cubic-bezier(.3, 1.6, .5, 1); }
-.home-btn.pop svg { animation: home-bounce .45s ease-out; }
-@keyframes home-pop { 0% { transform: scale(.85); } 60% { transform: scale(1.12); } 100% { transform: scale(1); } }
-@keyframes home-bounce { 0% { transform: translateY(0); } 40% { transform: translateY(-3px); } 100% { transform: translateY(0); } }
-@media (prefers-reduced-motion: reduce) { .home-btn.pop, .home-btn.pop svg { animation: none; } }
 .section-title { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: var(--violet-bright); margin: 20px 4px 4px; }
 .chem { display: grid; gap: 6px; }
 .chem.selected { border: 1px solid var(--accent); }
@@ -367,15 +347,18 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, .btn:focus-vi
 .program-card[open] summary { margin-bottom: 10px; }
 
 /* Settings gear (header) */
-.gear-btn {
+.icon-btn {
   display: grid; place-items: center;
   width: 44px; height: 44px; padding: 0;
   border: 0; background: none; color: var(--muted);
   cursor: pointer; -webkit-tap-highlight-color: transparent;
   transition: color .25s ease;
 }
-.gear-btn svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; transition: fill .25s ease; }
-.gear-btn:active { transform: scale(.88); }
+.icon-btn svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; transition: fill .25s ease; }
+.icon-btn:active { transform: scale(.88); }
+.icon-btn.active { color: var(--yellow); }
+.guide-btn.active svg { fill: rgba(255, 184, 28, .25); }
+.head-actions { display: flex; align-items: center; gap: 2px; margin-right: -8px; }
 /* On Settings: a filled yellow gear. Elsewhere: an outline. */
 .gear-btn.active { color: var(--yellow); }
 .gear-btn.active svg { fill: var(--yellow); }
@@ -551,3 +534,38 @@ details.bath.complete .bath-no { background: var(--ok); }
 .steps input:checked ~ .step-no { background: transparent; border-color: var(--line); color: var(--muted); }
 .steps input:checked ~ .step-text { color: var(--muted); text-decoration: line-through; }
 .step-text { flex: 1; }
+
+/* ---------- Home: raised centre button in the tab bar ---------- */
+.tabs .home-btn {
+  position: relative; z-index: 2;
+  flex: 1.15;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 0 0 5px; border: 0; background: none;
+  color: var(--yellow);
+  font: 700 11px/1.1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.home-disc {
+  display: grid; place-items: center;
+  width: 58px; height: 58px; margin-top: -22px;
+  border-radius: 50%;
+  border: 2.5px solid var(--yellow);
+  /* outlined glass when you're elsewhere */
+  background: linear-gradient(180deg, rgba(255, 255, 255, .14), rgba(255, 255, 255, .04)), rgba(30, 28, 44, .9);
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .45), inset 0 1px 0 rgba(255, 255, 255, .25);
+  transition: background .3s ease, box-shadow .3s ease, transform .2s ease;
+}
+.home-disc svg { width: 28px; height: 28px; fill: none; stroke: var(--yellow); stroke-width: 2.2; stroke-linejoin: round; transition: fill .3s ease, stroke .3s ease; }
+/* on the dashboard: solid Kodak yellow with a red house */
+.tabs .home-btn.active .home-disc {
+  background: var(--yellow);
+  box-shadow: 0 8px 22px rgba(255, 184, 28, .35), 0 0 0 5px rgba(255, 184, 28, .18), inset 0 1px 0 rgba(255, 255, 255, .5);
+}
+.tabs .home-btn.active .home-disc svg { fill: var(--red); stroke: var(--red); }
+.tabs .home-btn:active .home-disc { transform: scale(.9); }
+.tabs .home-btn.pop .home-disc { animation: home-pop .45s cubic-bezier(.3, 1.6, .5, 1); }
+.tabs .home-btn.pop svg { animation: home-bounce .45s ease-out; }
+@keyframes home-pop { 0% { transform: scale(.85); } 60% { transform: scale(1.12); } 100% { transform: scale(1); } }
+@keyframes home-bounce { 0% { transform: translateY(0); } 40% { transform: translateY(-3px); } 100% { transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .tabs .home-btn.pop .home-disc, .tabs .home-btn.pop svg { animation: none; } }

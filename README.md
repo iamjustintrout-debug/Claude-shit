@@ -3,7 +3,7 @@
 A phone app for mixing film-developing chemistry and timing the process.
 
 It opens to a **dashboard** of your mixed chemistry: rolls developed, rolls left, mix date, use-by
-date and the next roll's developer time. Tap the DevApp logo to return to it. Reopening the app
+date and the next roll's developer time. Tap the raised Home button in the middle of the tab bar to return to it. Reopening the app
 while it's still open returns to where you were, and a timer that was running carries on.
 
 Pick your chemistry at the top, and the whole app follows it:
@@ -33,7 +33,7 @@ Pick your chemistry at the top, and the whole app follows it:
   - Search, filter, edit or delete entries, and add past rolls by hand.
   - Attach photos from each roll and view them full screen to see how that development turned out.
   - Export it as a CSV spreadsheet or a backup file (photos included), and import the backup on another device.
-- **Guide:** processing notes, keeping times and troubleshooting for the selected kit.
+- **Guide** (book, top right): processing notes, keeping times and troubleshooting for the selected kit.
 - **Settings** (gear, top right): choose °C or °F and ml or fl oz independently; turn the end-of-step
   alarm, agitation beeps and floating timer on or off; keep the screen awake while developing, always,
   or never.
