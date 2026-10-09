@@ -16,6 +16,20 @@
   <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
+  <!-- Floating timer while a run is in progress on another page -->
+  <div class="mini" id="mini" hidden>
+    <button type="button" class="mini-main" id="mini-open" aria-label="Open timer">
+      <span class="mini-dot" aria-hidden="true"></span>
+      <span class="mini-text"><b id="mini-step"></b><small id="mini-sub"></small></span>
+      <span class="mini-time" id="mini-time" role="timer"></span>
+    </button>
+    <button type="button" class="mini-btn" id="mini-act" aria-label="Pause"></button>
+    <button type="button" class="mini-btn" id="mini-hide" aria-label="Hide timer">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>
+    </button>
+    <div class="mini-progress" aria-hidden="true"><div id="mini-fill"></div></div>
+  </div>
+
   <header class="top">
     <div class="top-row">
       <div class="brand">

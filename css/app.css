@@ -40,7 +40,8 @@ body { min-height: 100vh; min-height: 100dvh; padding-bottom: calc(104px + env(s
 .top {
   max-width: 640px;
   margin: 0 auto;
-  padding: calc(12px + env(safe-area-inset-top)) 16px 4px;
+  padding: calc(12px + env(safe-area-inset-top) + var(--mini-h, 0px)) 16px 4px;
+  transition: padding-top .3s ease;
 }
 .top-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .top h1 { font-size: 24px; margin: 0; color: var(--red); letter-spacing: -.01em; }
@@ -390,3 +391,72 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, .btn:focus-vi
 .setting .hint { display: block; margin: 2px 0 0; font-size: 13px; }
 .setting .seg { flex: none; width: 190px; }
 .setting .seg button { padding: 8px 6px; }
+
+/* ---------- Floating mini timer ---------- */
+.mini {
+  position: fixed;
+  z-index: 20;
+  top: calc(env(safe-area-inset-top) + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(calc(100% - 24px), 480px);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 6px 6px 8px;
+  border-radius: 22px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .10), rgba(255, 255, 255, .03)), rgba(30, 28, 44, .62);
+  -webkit-backdrop-filter: blur(24px) saturate(190%);
+  backdrop-filter: blur(24px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, .14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), inset 0 -1px 1px rgba(0, 0, 0, .35), 0 10px 28px rgba(0, 0, 0, .5);
+}
+.mini.enter { animation: mini-in .4s cubic-bezier(.34, 1.4, .5, 1); }
+@keyframes mini-in { from { transform: translate(-50%, -30px) scale(.9); opacity: 0; } }
+.mini-main {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: 10px;
+  padding: 4px; border: 0; background: none; color: var(--text);
+  text-align: left; cursor: pointer; font: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.mini-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--yellow); box-shadow: 0 0 0 4px rgba(255, 184, 28, .2); }
+.mini[data-status="running"] .mini-dot { animation: mini-blink 1.6s ease-in-out infinite; }
+.mini[data-status="paused"] .mini-dot, .mini[data-status="ready"] .mini-dot { background: var(--violet-bright); box-shadow: 0 0 0 4px var(--violet-dim); }
+.mini[data-status="warn"] .mini-dot, .mini[data-status="ended"] .mini-dot { background: var(--red); box-shadow: 0 0 0 4px rgba(218, 41, 28, .3); animation: mini-blink .7s ease-in-out infinite; }
+.mini[data-status="done"] .mini-dot { background: var(--ok); box-shadow: 0 0 0 4px rgba(111, 207, 127, .2); }
+@keyframes mini-blink { 50% { opacity: .35; } }
+.mini-text { flex: 1; min-width: 0; display: grid; }
+.mini-text b, .mini-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini-text b { font-size: 15px; }
+.mini-text small { font-size: 12px; color: var(--violet-bright); }
+.mini-time { flex: none; font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--yellow); }
+.mini[data-status="warn"] .mini-time, .mini[data-status="ended"] .mini-time { color: var(--red-bright); }
+.mini[data-status="paused"] .mini-time { color: var(--muted); }
+.mini-btn {
+  flex: none; display: grid; place-items: center;
+  width: 40px; height: 40px; padding: 0;
+  border: 0; border-radius: 50%;
+  background: rgba(255, 255, 255, .08); color: var(--text);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.mini-btn:active { transform: scale(.88); }
+.mini-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; transition: transform .3s ease; }
+#mini-act svg path { fill: currentColor; stroke-width: 1.5; }
+#mini-act { background: var(--yellow); color: var(--accent-text); }
+.mini-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255, 255, 255, .06); }
+.mini-progress div { height: 100%; background: var(--yellow); transition: width .25s linear; }
+.mini[data-status="warn"] .mini-progress div, .mini[data-status="ended"] .mini-progress div { background: var(--red); }
+/* Collapsed: a slim strip with just the countdown */
+.mini.collapsed { padding: 2px 4px 2px 12px; border-radius: 16px; }
+.mini.collapsed #mini-act, .mini.collapsed .mini-text small { display: none; }
+.mini.collapsed .mini-text { order: 2; }
+.mini.collapsed .mini-text b { font-size: 14px; font-weight: 600; color: var(--muted); }
+.mini.collapsed .mini-main { justify-content: flex-start; gap: 10px; }
+.mini.collapsed .mini-time { font-size: 18px; }
+.mini.collapsed .mini-btn { width: 30px; height: 30px; background: none; }
+.mini.collapsed #mini-hide svg { transform: rotate(180deg); }
+.mini.pulse { animation: mini-pulse .5s ease-out; }
+@keyframes mini-pulse { 40% { transform: translateX(-50%) scale(1.04); box-shadow: 0 0 0 3px var(--yellow), 0 10px 28px rgba(0, 0, 0, .5); } }
+@media (prefers-reduced-motion: reduce) { .mini, .mini.pulse, .mini-dot { animation: none !important; } }

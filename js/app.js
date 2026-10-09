@@ -113,6 +113,7 @@ function showTab(name) {
   document.querySelectorAll('.tabs button, .home-btn, .gear-btn').forEach((b) => b.classList.toggle('active', b.dataset.go === name));
   $('.home-btn').setAttribute('aria-current', name === 'home' ? 'page' : 'false');
   moveTabIndicator();
+  updateMini();
   renderHeader();
   if (name === 'home') renderHome();
   if (name === 'settings') renderSettings();
@@ -574,6 +575,11 @@ function setCue(text, flash = true) {
   const c = $('#run-cue');
   c.textContent = text;
   if (flash) { c.classList.remove('flash'); void c.offsetWidth; c.classList.add('flash'); }
+  if (run) {
+    run.cue = text;
+    if (flash) pulseMini();
+  }
+  updateMini();
 }
 
 function startTimer() {
@@ -600,6 +606,7 @@ function tick() {
   run.remaining = Math.max(0, (run.endAt - Date.now()) / 1000);
   const elapsed = s.sec - run.remaining;
   setClock(run.remaining, elapsed / s.sec, run.remaining <= 10 ? 'warn' : '');
+  updateMini();
 
   const a = run.agit;
   const cues = agitationCues(s.sec, a);
@@ -717,6 +724,89 @@ $('#done-log').addEventListener('click', () => {
 });
 $('#done-back').addEventListener('click', endRun);
 
+// ---------- Floating mini timer ----------
+// While a run is in progress and you're on another page, a glass bar at the
+// top shows the step and countdown. Tap it to go back; collapse it to a slim
+// strip with the chevron.
+
+const MINI_KEY = 'devapp.miniCollapsed';
+let miniCollapsed = false;
+try { miniCollapsed = sessionStorage.getItem(MINI_KEY) === '1'; } catch { /* ignore */ }
+
+const MINI_ICONS = {
+  pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg>',
+  play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12-7.5z"/></svg>',
+  next: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5v15l10-7.5zM19 5v14"/></svg>',
+};
+
+function miniState() {
+  if (!run) return null;
+  if (run.done) return { name: 'Done', sub: 'Tap to save to your roll log', time: '✓', status: 'done', progress: 1 };
+  const s = run.steps[run.idx];
+  const stepNo = `Step ${run.idx + 1}/${run.steps.length}`;
+  if (s.manual) return { name: s.name, sub: `${stepNo} · tap to continue`, time: '—', status: 'ready', progress: 0 };
+  const remaining = run.phase === 'running' ? Math.max(0, (run.endAt - Date.now()) / 1000) : run.remaining;
+  const progress = s.sec ? 1 - remaining / s.sec : 0;
+  const map = {
+    ready: { sub: `${stepNo} · ready to start`, status: 'ready', act: 'play', label: 'Start timer' },
+    running: { sub: `${stepNo} · ${run.cue || 'running'}`, status: remaining <= 10 ? 'warn' : 'running', act: 'pause', label: 'Pause' },
+    paused: { sub: `${stepNo} · paused`, status: 'paused', act: 'play', label: 'Resume' },
+    ended: { sub: run.idx === run.steps.length - 1 ? 'Drain the tank. Last step done' : 'Drain the tank', status: 'ended', act: 'next', label: 'Next step' },
+  }[run.phase] ?? {};
+  return { name: s.name, time: formatDuration(remaining), progress, ...map };
+}
+
+function updateMini() {
+  const m = $('#mini');
+  const st = miniState();
+  const show = !!st && activeTab !== 'develop';
+  if (show && m.hidden) { m.classList.remove('pulse'); m.classList.add('enter'); }
+  m.hidden = !show;
+  document.documentElement.style.setProperty('--mini-h', show ? (miniCollapsed ? '40px' : '70px') : '0px');
+  if (!show) return;
+  m.classList.toggle('collapsed', miniCollapsed);
+  m.dataset.status = st.status;
+  $('#mini-step').textContent = st.name;
+  $('#mini-sub').textContent = st.sub;
+  $('#mini-time').textContent = st.time;
+  $('#mini-fill').style.width = `${Math.round(st.progress * 100)}%`;
+  const act = $('#mini-act');
+  act.hidden = !st.act;
+  if (st.act && act.dataset.icon !== st.act) {
+    act.innerHTML = MINI_ICONS[st.act];
+    act.dataset.icon = st.act;
+  }
+  act.setAttribute('aria-label', st.label ?? '');
+  $('#mini-hide').setAttribute('aria-label', miniCollapsed ? 'Show timer' : 'Hide timer');
+}
+
+function pulseMini() {
+  const m = $('#mini');
+  m.classList.remove('pulse');
+  void m.offsetWidth;
+  m.classList.add('pulse');
+}
+$('#mini').addEventListener('animationend', (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.remove('pulse', 'enter'); });
+
+$('#mini-open').addEventListener('click', () => {
+  if (miniCollapsed) return setMiniCollapsed(false);
+  showTab('develop');
+});
+// Start / pause / resume / next step, reusing the main timer's controls.
+$('#mini-act').addEventListener('click', () => {
+  if (!run) return;
+  unlockAudio();
+  if (run.phase === 'running' || run.phase === 'paused') $('#run-pause').click();
+  else $('#run-go').click();
+});
+$('#mini-hide').addEventListener('click', () => setMiniCollapsed(!miniCollapsed));
+
+function setMiniCollapsed(v) {
+  miniCollapsed = v;
+  try { sessionStorage.setItem(MINI_KEY, v ? '1' : '0'); } catch { /* ignore */ }
+  updateMini();
+}
+
 // ---------- Keep a run across app restarts ----------
 // iOS may close a backgrounded web app. Save the run so reopening picks up
 // where it left off (the countdown continues from its absolute end time).
@@ -725,6 +815,7 @@ const RUN_KEY = 'devapp.run';
 const RUN_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
 function persistRun() {
+  updateMini();
   try {
     if (!run) return localStorage.removeItem(RUN_KEY);
     const { timer, ...data } = run;

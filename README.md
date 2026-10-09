@@ -24,6 +24,8 @@ Pick your chemistry at the top, and the whole app follows it:
   - Agitation reminders beep and vibrate. Use the kit's own pattern, or pick every 15/30/60 s.
   - The countdown digits fill with liquid that stays level as you tilt the phone.
   - The screen stays awake while it runs.
+  - Leave the Develop tab mid-run and a floating timer bar follows you across the app. Pause,
+    resume or start the next step from it, collapse it to a slim strip, or tap it to jump back.
 - **Batch:** rolls developed and use-by dates, tracked separately for each kit.
 - **Rolls:** a log of every roll you develop.
   - Records the film (picked from a list of colour C-41, E-6 and ECN-2 stocks, or typed in), format,
