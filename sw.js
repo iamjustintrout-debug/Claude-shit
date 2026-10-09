@@ -1,6 +1,6 @@
 // Offline support: cache the app shell, serve it cache-first.
 // Bump VERSION whenever any file below changes so phones pick up the update.
-const VERSION = 'v15';
+const VERSION = 'v16';
 const FILES = [
   './',
   'index.html',

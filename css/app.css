@@ -44,7 +44,7 @@ body { min-height: 100vh; min-height: 100dvh; padding-bottom: calc(104px + env(s
   transition: padding-top .3s ease;
 }
 .top-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.top h1 { font-size: 24px; margin: 0; color: var(--red); letter-spacing: -.01em; }
+.top h1 { font-size: 24px; margin: 0; color: rgba(225, 224, 245, .8); letter-spacing: -.01em; } /* same as the tab bar labels */
 .kit-pick { margin-top: 10px; }
 .kit-pick select { font-weight: 600; }
 
