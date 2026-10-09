@@ -22,6 +22,7 @@ Pick your chemistry at the top, and the whole app follows it:
   - Times adjust to the kit's options (temperature, push, dilution) and to how many rolls the
     chemistry has already processed.
   - Agitation reminders beep and vibrate. Use the kit's own pattern, or pick every 15/30/60 s.
+  - The countdown digits fill with liquid that stays level as you tilt the phone.
   - The screen stays awake while it runs.
 - **Batch:** rolls developed and use-by dates, tracked separately for each kit.
 - **Rolls:** a log of every roll you develop.

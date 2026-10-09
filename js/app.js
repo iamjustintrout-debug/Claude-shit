@@ -104,6 +104,7 @@ function showTab(name) {
   document.querySelectorAll('.tab').forEach((t) => { t.hidden = t.dataset.tab !== name; });
   document.querySelectorAll('.tabs button, .home-btn').forEach((b) => b.classList.toggle('active', b.dataset.go === name));
   $('.home-btn').setAttribute('aria-current', name === 'home' ? 'page' : 'false');
+  moveTabIndicator();
   renderHeader();
   if (name === 'home') renderHome();
   if (name === 'batch') renderBatch();
@@ -112,6 +113,22 @@ function showTab(name) {
   window.scrollTo(0, 0);
 }
 document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.go)));
+
+// The glass lens slides to the active tab (and fades out on the dashboard).
+let indicatorTab = null;
+function moveTabIndicator() {
+  const ind = $('.tab-indicator');
+  const btn = document.querySelector(`.tabs button[data-go="${activeTab}"]`);
+  if (!btn) { ind.classList.remove('on'); indicatorTab = null; return; }
+  const moved = indicatorTab && indicatorTab !== activeTab;
+  ind.style.width = `${btn.offsetWidth}px`;
+  ind.style.transform = `translateX(${btn.offsetLeft}px)`;
+  ind.classList.add('on');
+  if (moved) { ind.classList.remove('squish'); void ind.offsetWidth; ind.classList.add('squish'); }
+  indicatorTab = activeTab;
+}
+window.addEventListener('resize', moveTabIndicator);
+$('.tab-indicator').addEventListener('animationend', (e) => e.currentTarget.classList.remove('squish'));
 
 // A little bounce whenever the home button is pressed.
 $('.home-btn').addEventListener('click', (e) => {
@@ -397,6 +414,7 @@ $('#dev-start').addEventListener('click', () => startRun(0));
 function startRun(idx) {
   const prog = currentProgram();
   if (prog.error) return;
+  startTilt();
   run = {
     opts: prog.opts, steps: prog.steps, idx,
     films: devFilmPickers.map((p) => p.get() ?? { id: null, name: 'Unknown film' }),
@@ -419,11 +437,12 @@ const DIGIT_BOTTOM = 120;
 const WAVE_AMP = 5;
 
 function wavePath(amp, length, phase) {
-  // A sine wave from x=0 to 960 (seamless when shifted by a multiple of `length`),
-  // closed downward into a solid body.
-  let d = `M0 ${amp * Math.sin(phase)}`;
-  for (let x = 10; x <= 960; x += 10) d += ` L${x} ${(amp * Math.sin((x / length) * 2 * Math.PI + phase)).toFixed(2)}`;
-  return `${d} L960 200 L0 200 Z`;
+  // A sine wave from x=-600 to 1320 (seamless when shifted by a multiple of `length`),
+  // closed downward into a deep body so it still covers the digits when tilted.
+  const y = (x) => (amp * Math.sin((x / length) * 2 * Math.PI + phase)).toFixed(2);
+  let d = `M-600 ${y(-600)}`;
+  for (let x = -590; x <= 1320; x += 10) d += ` L${x} ${y(x)}`;
+  return `${d} L1320 700 L-600 700 Z`;
 }
 $('#wave-front').setAttribute('d', wavePath(WAVE_AMP, 120, 0));
 $('#wave-back').setAttribute('d', wavePath(WAVE_AMP, 120, Math.PI));
@@ -441,6 +460,71 @@ function setClock(sec, progress, state = '') {
   const y = empty - p * (empty - full);
   $('#liquid').style.transform = `translateY(${y.toFixed(2)}px)`;
   $('#run-clock').className = `clock ${state}`;
+}
+
+// ---------- Tilt: the liquid stays level as you tilt the phone ----------
+// Gravity from the accelerometer gives the phone's roll; the surface rotates
+// the other way, on a damped spring so it sloshes and settles.
+
+const tilt = { target: 0, angle: 0, vel: 0, upSign: 0, raf: 0, last: 0, on: false };
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+
+function onMotion(e) {
+  const g = e.accelerationIncludingGravity;
+  if (!g || g.x == null || g.y == null) return;
+  // Browsers disagree on the sign of these axes. Phones are held top-up,
+  // so learn the sign from readings where gravity is mostly along y.
+  if (Math.abs(g.y) > 6 && Math.abs(g.y) > Math.abs(g.x)) tilt.upSign = Math.sign(g.y);
+  const orientation = screen.orientation?.angle ?? window.orientation ?? 0;
+  const inPlane = Math.hypot(g.x, g.y);
+  if (!tilt.upSign || orientation !== 0 || inPlane < 2.5) { tilt.target = 0; wakeTilt(); return; }
+  const deg = (Math.atan2(g.x * tilt.upSign, g.y * tilt.upSign) * 180) / Math.PI;
+  tilt.target = Math.max(-40, Math.min(40, deg));
+  wakeTilt();
+}
+
+// The animation loop sleeps while the liquid is at rest.
+function wakeTilt() {
+  if (!tilt.on || tilt.raf) return;
+  tilt.last = 0;
+  tilt.raf = requestAnimationFrame(tiltFrame);
+}
+
+function tiltFrame(now) {
+  const dt = Math.min(0.05, (now - (tilt.last || now)) / 1000);
+  tilt.last = now;
+  const acc = 70 * (tilt.target - tilt.angle) - 7 * tilt.vel;
+  tilt.vel += acc * dt;
+  tilt.angle += tilt.vel * dt;
+  const settled = Math.abs(tilt.target - tilt.angle) < 0.05 && Math.abs(tilt.vel) < 0.05;
+  if (settled) { tilt.angle = tilt.target; tilt.vel = 0; }
+  const slosh = 1 + Math.min(1.6, Math.abs(tilt.vel) / 50);
+  $('#tilt').setAttribute('transform', `rotate(${tilt.angle.toFixed(2)} 180 0) scale(1 ${slosh.toFixed(3)})`);
+  tilt.raf = settled ? 0 : requestAnimationFrame(tiltFrame);
+}
+
+// Must be called from a tap: iOS asks for motion permission.
+function startTilt() {
+  if (tilt.on || reducedMotion.matches || typeof DeviceMotionEvent === 'undefined') return;
+  const attach = () => {
+    if (tilt.on) return;
+    tilt.on = true;
+    window.addEventListener('devicemotion', onMotion);
+  };
+  if (typeof DeviceMotionEvent.requestPermission === 'function') {
+    DeviceMotionEvent.requestPermission().then((r) => { if (r === 'granted') attach(); }).catch(() => {});
+  } else {
+    attach();
+  }
+}
+
+function stopTilt() {
+  if (!tilt.on) return;
+  tilt.on = false;
+  window.removeEventListener('devicemotion', onMotion);
+  cancelAnimationFrame(tilt.raf);
+  Object.assign(tilt, { target: 0, angle: 0, vel: 0, raf: 0 });
+  $('#tilt').removeAttribute('transform');
 }
 
 function enterStep() {
@@ -586,6 +670,7 @@ function endRun() {
   if (run) clearTimeout(run.timer);
   run = null;
   persistRun();
+  stopTilt();
   keepAwake(false);
   $('#dev-run').hidden = true;
   $('#dev-done').hidden = true;
@@ -659,7 +744,7 @@ function restoreRun() {
   }
   keepAwake(true);
   // Audio can only start after a tap.
-  document.addEventListener('pointerdown', unlockAudio, { once: true });
+  document.addEventListener('pointerdown', () => { unlockAudio(); startTilt(); }, { once: true });
   return true;
 }
 

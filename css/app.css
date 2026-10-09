@@ -23,7 +23,10 @@ html, body {
   -webkit-text-size-adjust: 100%;
 }
 
-body { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+/* Every page fills at least the screen so the fixed tab bar sits in the same
+   place whether the page scrolls or not. */
+html { min-height: 100%; }
+body { min-height: 100vh; min-height: 100dvh; padding-bottom: calc(104px + env(safe-area-inset-bottom)); }
 
 .top {
   max-width: 640px;
@@ -184,25 +187,6 @@ label.check input { width: 22px; height: 22px; margin: 0; accent-color: var(--ac
 .trouble b { display: block; }
 .trouble span { display: block; color: var(--muted); font-size: 14px; }
 
-/* Bottom tabs */
-.tabs {
-  position: fixed;
-  left: 0; right: 0; bottom: 0;
-  display: flex;
-  background: #181818;
-  border-top: 1px solid var(--line);
-  padding-bottom: env(safe-area-inset-bottom);
-}
-.tabs button {
-  flex: 1;
-  padding: 16px 0;
-  background: none;
-  border: 0;
-  color: var(--muted);
-  font: inherit;
-  font-weight: 600;
-}
-.tabs button.active { color: var(--accent); }
 
 /* Film picker & roll log */
 label textarea, .film-pick select, .film-pick input {
@@ -231,7 +215,6 @@ label textarea { resize: vertical; }
 .roll-form { display: grid; gap: 12px; }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 .file-btn { cursor: pointer; }
-.tabs button { padding: 16px 0; font-size: 15px; }
 
 /* Home button & dashboard */
 .brand { display: flex; align-items: center; gap: 12px; }
@@ -266,3 +249,79 @@ label textarea { resize: vertical; }
 .recent li { padding: 6px 0; border-top: 1px solid var(--line); }
 .recent li:first-child { border-top: 0; }
 .btn-row .hint { margin: 0; align-self: center; flex: 1; }
+
+/* ---------- Liquid Glass tab bar ---------- */
+.tabs {
+  --pad: 5px;
+  position: fixed;
+  z-index: 10;
+  left: 50%;
+  bottom: max(10px, calc(env(safe-area-inset-bottom) - 8px));
+  transform: translateX(-50%);
+  width: min(calc(100% - 24px), 480px);
+  display: flex;
+  padding: var(--pad);
+  border-radius: 999px;
+  /* Translucent glass: blur and boost what's behind, with a rim of light. */
+  background: linear-gradient(180deg, rgba(255, 255, 255, .10), rgba(255, 255, 255, .03)), rgba(28, 28, 30, .52);
+  -webkit-backdrop-filter: blur(24px) saturate(190%);
+  backdrop-filter: blur(24px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, .14);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .22),
+    inset 0 -1px 1px rgba(0, 0, 0, .35),
+    0 12px 32px rgba(0, 0, 0, .5),
+    0 2px 6px rgba(0, 0, 0, .3);
+}
+.tabs button {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-height: 54px;
+  padding: 6px 0 5px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: rgba(235, 235, 245, .78);
+  font: 600 11px/1.1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: .01em;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color .3s ease, transform .2s ease;
+}
+.tabs button svg { width: 25px; height: 25px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.tabs button:active { transform: scale(.9); }
+.tabs button.active { color: var(--accent); }
+.tabs button.active svg { stroke-width: 2.2; }
+/* The sliding glass lens behind the active tab. */
+.tab-indicator {
+  position: absolute;
+  top: var(--pad);
+  bottom: var(--pad);
+  left: 0;
+  width: 0;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .20), rgba(255, 255, 255, .07));
+  border: 1px solid rgba(255, 255, 255, .18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), inset 0 -1px 2px rgba(0, 0, 0, .25), 0 2px 10px rgba(0, 0, 0, .25);
+  opacity: 0;
+  transition:
+    transform .55s cubic-bezier(.34, 1.45, .5, 1),
+    width .55s cubic-bezier(.34, 1.45, .5, 1),
+    opacity .3s ease;
+  pointer-events: none;
+}
+.tab-indicator.on { opacity: 1; }
+.tab-indicator.squish { animation: squish .55s ease-out; }
+@keyframes squish { 30% { scale: 1.12 .86; } 65% { scale: .97 1.04; } 100% { scale: 1 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .tab-indicator { transition: opacity .2s ease; }
+  .tab-indicator.squish { animation: none; }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .tabs { background: rgba(28, 28, 30, .96); }
+}
