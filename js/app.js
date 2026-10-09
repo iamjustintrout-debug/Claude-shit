@@ -826,7 +826,7 @@ function renderBatch() {
       el('h2', { textContent: `${k.name}: ${k.mixes[b.mixKey].label}, mixed ${fmtDate(b.mixedOn)}` }),
       el('div', { className: 'big-num', textContent: `${b.rolls} / ${cap}` }),
       el('div', { className: 'hint', textContent: b.rolls >= cap ? 'Capacity reached. Mix a new batch.' : `rolls developed. Next is roll ${b.rolls + 1}.` }),
-      el('div', { className: 'bar' }, el('div', { style: `width:${Math.min(100, (b.rolls / cap) * 100)}%` })),
+      el('div', { className: b.rolls >= cap ? 'bar full' : 'bar' }, el('div', { style: `width:${Math.min(100, (b.rolls / cap) * 100)}%` })),
       exp.length
         ? el('table', { className: 'tbl' },
           el('tr', {}, el('th', { textContent: 'Working solution' }), el('th', { textContent: 'Use by' }), el('th')),
@@ -1073,7 +1073,7 @@ function chemCard(k, b) {
     el('div', { className: 'chem-count' },
       el('span', { className: 'big-num', textContent: b.rolls }),
       el('span', { className: 'hint', textContent: ` of ${cap} rolls developed · ${left} left` })),
-    el('div', { className: 'bar' }, el('div', { style: `width:${cap ? Math.min(100, (b.rolls / cap) * 100) : 0}%` })),
+    el('div', { className: left === 0 ? 'bar full' : 'bar' }, el('div', { style: `width:${cap ? Math.min(100, (b.rolls / cap) * 100) : 0}%` })),
     exp ? el('div', { className: 'roll-line', textContent: expDays < 0
       ? `${exp.name} expired ${-expDays} day${expDays === -1 ? '' : 's'} ago`
       : `Use ${exp.name.toLowerCase()} by ${fmtDate(exp.date)} (${expDays} day${expDays === 1 ? '' : 's'})` }) : null,
