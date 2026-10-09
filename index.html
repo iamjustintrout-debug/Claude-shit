@@ -198,7 +198,7 @@
       </div>
       <div class="card">
         <h2>Backup</h2>
-        <p class="hint">Your roll log is stored only on this device. Export a backup now and then.</p>
+        <p class="hint">Your roll log and photos are stored only on this device. Export a backup now and then; it includes your photos.</p>
         <div class="btn-row">
           <button class="btn" id="rolls-csv">Export spreadsheet (CSV)</button>
           <button class="btn" id="rolls-json">Export backup</button>
@@ -288,6 +288,21 @@
       <p class="hint center" id="guide-source"></p>
     </section>
   </main>
+
+  <!-- Photo viewer -->
+  <div class="viewer" id="viewer" hidden role="dialog" aria-modal="true" aria-label="Roll photo">
+    <div class="viewer-top">
+      <span id="viewer-count"></span>
+      <button type="button" class="viewer-btn" id="viewer-close" aria-label="Close">✕</button>
+    </div>
+    <img id="viewer-img" alt="">
+    <p class="viewer-caption" id="viewer-caption"></p>
+    <div class="viewer-bar">
+      <button type="button" class="viewer-btn" id="viewer-prev" aria-label="Previous photo">‹</button>
+      <button type="button" class="btn small ghost danger" id="viewer-delete">Remove photo</button>
+      <button type="button" class="viewer-btn" id="viewer-next" aria-label="Next photo">›</button>
+    </div>
+  </div>
 
   <nav class="tabs" aria-label="Sections">
     <span class="tab-indicator" aria-hidden="true"></span>

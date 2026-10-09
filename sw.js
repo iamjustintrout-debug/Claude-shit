@@ -1,6 +1,6 @@
 // Offline support: cache the app shell, serve it cache-first.
 // Bump VERSION whenever any file below changes so phones pick up the update.
-const VERSION = 'v17';
+const VERSION = 'v18';
 const FILES = [
   './',
   'index.html',
@@ -9,6 +9,7 @@ const FILES = [
   'js/kits.js',
   'js/logic.js',
   'js/films.js',
+  'js/photos.js',
   'manifest.webmanifest',
   'icons/icon.svg',
   'icons/icon-192.png',

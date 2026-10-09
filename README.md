@@ -31,7 +31,8 @@ Pick your chemistry at the top, and the whole app follows it:
   - Records the film (picked from a list of colour C-41, E-6 and ECN-2 stocks, or typed in), format,
     chemistry, settings, developer time and temperature, and your notes.
   - Search, filter, edit or delete entries, and add past rolls by hand.
-  - Export it as a CSV spreadsheet or a backup file, and import the backup on another device.
+  - Attach photos from each roll and view them full screen to see how that development turned out.
+  - Export it as a CSV spreadsheet or a backup file (photos included), and import the backup on another device.
 - **Guide:** processing notes, keeping times and troubleshooting for the selected kit.
 - **Settings** (gear, top right): choose °C or °F and ml or fl oz independently; turn the end-of-step
   alarm, agitation beeps and floating timer on or off; keep the screen awake while developing, always,

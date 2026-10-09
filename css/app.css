@@ -483,3 +483,37 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, .btn:focus-vi
 
 .setting.stack { flex-direction: column; align-items: stretch; }
 .setting.stack .seg { width: auto; margin-top: 10px; }
+
+/* Roll photos */
+.photos { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.thumb {
+  width: 76px; height: 76px; padding: 0;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: #26242e center / cover no-repeat;
+  cursor: pointer;
+}
+.thumb.missing { background-image: none !important; opacity: .4; }
+.thumb.add {
+  display: grid; place-content: center; text-align: center; gap: 0;
+  border: 1.5px dashed var(--violet); background: var(--violet-dim); color: var(--violet-bright);
+}
+.thumb.add span { font-size: 26px; line-height: 1; font-weight: 300; }
+.thumb.add small { font-size: 11px; font-weight: 600; }
+body.no-scroll { overflow: hidden; }
+.viewer {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  padding: calc(env(safe-area-inset-top) + 12px) 12px calc(env(safe-area-inset-bottom) + 16px);
+  background: #08070a;
+}
+.viewer[hidden] { display: none !important; }
+.viewer-top { position: absolute; top: calc(env(safe-area-inset-top) + 10px); left: 16px; right: 12px; display: flex; justify-content: space-between; align-items: center; color: var(--muted); }
+#viewer-img { max-width: 100%; max-height: calc(100% - 150px); object-fit: contain; border-radius: 6px; }
+.viewer-caption { margin: 0; color: var(--violet-bright); font-size: 14px; text-align: center; }
+.viewer-bar { display: flex; align-items: center; gap: 16px; }
+.viewer-btn {
+  width: 44px; height: 44px; border: 0; border-radius: 50%;
+  background: rgba(255, 255, 255, .1); color: var(--text);
+  font-size: 24px; line-height: 1; cursor: pointer;
+}
+.viewer-btn:disabled { opacity: .3; }

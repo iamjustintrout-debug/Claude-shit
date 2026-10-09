@@ -1,5 +1,6 @@
 import { KITS, DEFAULT_KIT } from './kits.js';
 import { FILM_FORMATS, filmGroups, filmLabel, findFilm } from './films.js';
+import { putPhoto, getPhoto, deletePhoto, newPhotoId, processImage, blobToDataURL, dataURLToBlob } from './photos.js';
 import {
   buildProgram, agitationCues, formatDuration, fmtTemp, fmtTol, fmtVol, mlToFlOz, ML_PER_FL_OZ,
   mixChecklist, totalWater, addWeeks, daysUntil, batchExpiry,
@@ -1118,6 +1119,7 @@ function rollCard(e) {
     if (!confirm(`Delete this ${e.film.name} roll from the log?`)) return;
     rollLog = rollLog.filter((x) => x.id !== e.id);
     saveLog();
+    for (const id of e.photos ?? []) deletePhoto(id).catch(() => {});
     renderRolls();
   });
   return el('div', { className: 'card roll' },
@@ -1126,8 +1128,121 @@ function rollCard(e) {
     e.settings.length ? el('div', { className: 'roll-line', textContent: e.settings.map((x) => settingText(x, tempUnits())).join(' · ') }) : null,
     dev ? el('div', { className: 'roll-line', textContent: dev }) : null,
     e.notes ? el('p', { className: 'roll-notes', textContent: e.notes }) : null,
+    photoStrip(e),
     el('div', { className: 'btn-row' }, edit, del));
 }
+
+// ---------- Roll photos ----------
+
+const thumbURLs = new Map(); // photo id -> object URL of its thumbnail
+
+async function thumbURL(id) {
+  if (thumbURLs.has(id)) return thumbURLs.get(id);
+  const rec = await getPhoto(id);
+  if (!rec) return null;
+  const url = URL.createObjectURL(rec.thumb);
+  thumbURLs.set(id, url);
+  return url;
+}
+
+function photoStrip(e) {
+  const ids = e.photos ?? [];
+  const thumbs = ids.map((id, i) => {
+    const btn = el('button', { type: 'button', className: 'thumb', ariaLabel: `Photo ${i + 1} of ${e.film.name}` });
+    thumbURL(id).then((url) => { if (url) btn.style.backgroundImage = `url("${url}")`; else btn.classList.add('missing'); }).catch(() => btn.classList.add('missing'));
+    btn.addEventListener('click', () => openViewer(e, i));
+    return btn;
+  });
+  const input = el('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true });
+  input.addEventListener('change', () => addPhotos(e, [...input.files]));
+  const add = el('label', { className: 'thumb add', ariaLabel: 'Add photos' },
+    el('span', { textContent: '+' }), el('small', { textContent: ids.length ? 'Add' : 'Add photo' }), input);
+  return el('div', { className: 'photos' }, ...thumbs, add);
+}
+
+async function addPhotos(e, files) {
+  if (!files.length) return;
+  let failed = 0;
+  for (const file of files) {
+    try {
+      const rec = await processImage(file);
+      const id = newPhotoId();
+      await putPhoto(id, rec);
+      (e.photos ??= []).push(id);
+    } catch {
+      failed += 1;
+    }
+  }
+  saveLog();
+  renderRolls();
+  if (failed) alert(`${failed} photo${failed === 1 ? '' : 's'} couldn't be added.`);
+}
+
+// Full-screen viewer
+const viewer = { roll: null, idx: 0, url: null };
+
+async function showViewerPhoto() {
+  const { roll, idx } = viewer;
+  const id = roll.photos[idx];
+  if (viewer.url) URL.revokeObjectURL(viewer.url);
+  viewer.url = null;
+  $('#viewer-img').removeAttribute('src');
+  const rec = await getPhoto(id).catch(() => null);
+  if (rec) {
+    viewer.url = URL.createObjectURL(rec.full);
+    $('#viewer-img').src = viewer.url;
+  }
+  $('#viewer-caption').textContent = `${roll.film.name} · ${fmtDate(roll.date)}${roll.devSec != null ? ` · ${roll.devName} ${formatDuration(roll.devSec)}` : ''}`;
+  $('#viewer-count').textContent = `${idx + 1} / ${roll.photos.length}`;
+  $('#viewer-prev').disabled = idx === 0;
+  $('#viewer-next').disabled = idx === roll.photos.length - 1;
+}
+
+function openViewer(roll, idx) {
+  Object.assign(viewer, { roll, idx });
+  $('#viewer').hidden = false;
+  document.body.classList.add('no-scroll');
+  showViewerPhoto();
+}
+
+function closeViewer() {
+  $('#viewer').hidden = true;
+  document.body.classList.remove('no-scroll');
+  if (viewer.url) URL.revokeObjectURL(viewer.url);
+  viewer.url = null;
+  viewer.roll = null;
+}
+
+$('#viewer-close').addEventListener('click', closeViewer);
+$('#viewer-prev').addEventListener('click', () => { if (viewer.idx > 0) { viewer.idx -= 1; showViewerPhoto(); } });
+$('#viewer-next').addEventListener('click', () => { if (viewer.idx < viewer.roll.photos.length - 1) { viewer.idx += 1; showViewerPhoto(); } });
+$('#viewer-delete').addEventListener('click', async () => {
+  const { roll, idx } = viewer;
+  if (!confirm('Remove this photo from the roll?')) return;
+  const [id] = roll.photos.splice(idx, 1);
+  saveLog();
+  deletePhoto(id).catch(() => {});
+  URL.revokeObjectURL(thumbURLs.get(id));
+  thumbURLs.delete(id);
+  if (!roll.photos.length) closeViewer();
+  else { viewer.idx = Math.min(idx, roll.photos.length - 1); showViewerPhoto(); }
+  renderRolls();
+});
+// Swipe left/right between photos.
+let swipeX = null;
+$('#viewer').addEventListener('touchstart', (ev) => { swipeX = ev.touches[0].clientX; }, { passive: true });
+$('#viewer').addEventListener('touchend', (ev) => {
+  if (swipeX == null) return;
+  const dx = ev.changedTouches[0].clientX - swipeX;
+  swipeX = null;
+  if (Math.abs(dx) > 50) $(dx < 0 ? '#viewer-next' : '#viewer-prev').click();
+});
+document.addEventListener('keydown', (ev) => {
+  if ($('#viewer').hidden) return;
+  if (ev.key === 'Escape') closeViewer();
+  if (ev.key === 'ArrowLeft') $('#viewer-prev').click();
+  if (ev.key === 'ArrowRight') $('#viewer-next').click();
+});
 
 function rollForm({ film, format, date, notes, kitId, withKit }) {
   const picker = filmPicker(film, KITS[kitId]?.process ?? 'C-41');
@@ -1216,8 +1331,16 @@ function download(name, text, type) {
 }
 
 $('#rolls-csv').addEventListener('click', () => download(`devapp-rolls-${today()}.csv`, logToCSV(sortedLog(), tempUnits()), 'text/csv'));
-$('#rolls-json').addEventListener('click', () => download(`devapp-backup-${today()}.json`,
-  JSON.stringify({ app: 'DevApp', version: 1, rolls: rollLog, customFilms: state.customFilms }, null, 2), 'application/json'));
+$('#rolls-json').addEventListener('click', async () => {
+  // Photos go in the backup as data URLs so a restore brings them back.
+  const photos = {};
+  for (const id of rollLog.flatMap((e) => e.photos ?? [])) {
+    const rec = await getPhoto(id).catch(() => null);
+    if (rec) photos[id] = { full: await blobToDataURL(rec.full), thumb: await blobToDataURL(rec.thumb), w: rec.w, h: rec.h, added: rec.added };
+  }
+  download(`devapp-backup-${today()}.json`,
+    JSON.stringify({ app: 'DevApp', version: 2, rolls: rollLog, customFilms: state.customFilms, photos }), 'application/json');
+});
 $('#rolls-import').addEventListener('change', async (ev) => {
   const file = ev.target.files?.[0];
   ev.target.value = '';
@@ -1227,6 +1350,20 @@ $('#rolls-import').addEventListener('change', async (ev) => {
     const incoming = sanitizeLog(Array.isArray(data) ? data : data.rolls);
     const have = new Set(rollLog.map((e) => e.id));
     const added = incoming.filter((e) => !have.has(e.id));
+    // Restore photos for the new rolls (only image data URLs are accepted).
+    const photos = data && typeof data.photos === 'object' ? data.photos : {};
+    for (const e of added) {
+      const kept = [];
+      for (const id of e.photos) {
+        const p = photos[id];
+        if (!p || !/^data:image\//.test(p.full ?? '') || !/^data:image\//.test(p.thumb ?? '')) continue;
+        try {
+          await putPhoto(id, { full: await dataURLToBlob(p.full), thumb: await dataURLToBlob(p.thumb), w: p.w, h: p.h, added: p.added });
+          kept.push(id);
+        } catch { /* skip a bad photo */ }
+      }
+      e.photos = kept;
+    }
     rollLog.push(...added);
     if (Array.isArray(data.customFilms)) {
       rememberCustomFilms(data.customFilms.filter((n) => typeof n === 'string').map((name) => ({ name, custom: true })));

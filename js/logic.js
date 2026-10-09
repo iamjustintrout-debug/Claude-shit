@@ -185,5 +185,9 @@ export function sanitizeLog(data) {
   if (!Array.isArray(data)) return [];
   return data.filter((e) => e && typeof e.id === 'string' && typeof e.date === 'string' && !Number.isNaN(Date.parse(e.date))
     && e.film && typeof e.film.name === 'string')
-    .map((e) => ({ settings: [], notes: '', format: '', ...e, settings: Array.isArray(e.settings) ? e.settings : [] }));
+    .map((e) => ({
+      settings: [], notes: '', format: '', ...e,
+      settings: Array.isArray(e.settings) ? e.settings : [],
+      photos: Array.isArray(e.photos) ? e.photos.filter((p) => typeof p === 'string' && /^p-[a-z0-9-]+$/.test(p)) : [],
+    }));
 }
