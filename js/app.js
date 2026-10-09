@@ -320,6 +320,13 @@ function renderProgram() {
     return li;
   }));
   $('#dev-notes').replaceChildren(...(prog.notes ?? []).map((n) => el('li', { textContent: noteText(n) })));
+
+  // Collapsed-program summary: step count, total time, and the developer step.
+  const timed = (prog.steps ?? []).filter((x) => !x.manual);
+  const total = timed.reduce((a, x) => a + x.sec, 0);
+  $('#dev-program-meta').textContent = prog.steps ? `${prog.steps.length} steps · ${formatDuration(total)}` : '';
+  const devStep = timed.find((x) => x.critical);
+  $('#dev-summary').textContent = devStep ? `${devStep.name} ${formatDuration(devStep.sec)} at ${T(devStep.temp)}` : '';
 }
 
 dev.mix.addEventListener('input', renderProgram);
@@ -410,6 +417,10 @@ function renderDevFilms() {
 let run = null;
 
 $('#dev-start').addEventListener('click', () => startRun(0));
+
+// Remember whether the program list is open.
+$('#dev-program-card').open = !!state.prefs.programOpen;
+$('#dev-program-card').addEventListener('toggle', (e) => { state.prefs.programOpen = e.currentTarget.open; save(); });
 
 function startRun(idx) {
   const prog = currentProgram();

@@ -343,3 +343,24 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, .btn:focus-vi
   outline: 2px solid var(--violet-bright);
   outline-offset: 2px;
 }
+
+/* Develop: Start Dev and the collapsible program */
+.start-wrap { margin: 16px 0 4px; }
+.start-wrap .btn.big { font-size: 20px; padding: 18px; border-radius: 16px; box-shadow: 0 6px 20px rgba(255, 184, 28, .18); }
+.start-wrap .btn.big:disabled { box-shadow: none; }
+.start-wrap .hint { margin-top: 8px; }
+.program-card summary {
+  display: flex; align-items: center; gap: 8px;
+  list-style: none; cursor: pointer;
+  font-size: 17px; font-weight: 700;
+  -webkit-tap-highlight-color: transparent;
+}
+.program-card summary::-webkit-details-marker { display: none; }
+.program-card summary::after {
+  content: ''; width: 9px; height: 9px; margin-left: 4px;
+  border-right: 2px solid var(--violet-bright); border-bottom: 2px solid var(--violet-bright);
+  transform: rotate(45deg) translateY(-3px); transition: transform .25s ease;
+}
+.program-card[open] summary::after { transform: rotate(225deg) translate(-2px, -1px); }
+.summary-meta { margin-left: auto; font-size: 14px; font-weight: 600; color: var(--violet-bright); }
+.program-card[open] summary { margin-bottom: 10px; }
