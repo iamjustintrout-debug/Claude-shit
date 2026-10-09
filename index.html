@@ -24,7 +24,9 @@
         </button>
         <h1>DevApp</h1>
       </div>
-      <div class="seg small" id="units" role="radiogroup" aria-label="Units"></div>
+      <button type="button" class="gear-btn" data-go="settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/><circle class="gear-hole" cx="12" cy="12" r="3"/></svg>
+      </button>
     </div>
     <label class="kit-pick">Chemistry
       <select id="kit"></select>
@@ -188,6 +190,31 @@
           <button class="btn" id="rolls-json">Export backup</button>
           <label class="btn file-btn">Import backup<input type="file" id="rolls-import" accept="application/json,.json" hidden></label>
         </div>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="tab-settings" class="tab" data-tab="settings" hidden>
+      <h2 class="section-title">Settings</h2>
+      <div class="card">
+        <h2>Units</h2>
+        <div class="setting">
+          <div><b>Temperature</b><span class="hint">Process and mixing temperatures</span></div>
+          <div class="seg" id="set-temp" role="radiogroup" aria-label="Temperature unit"></div>
+        </div>
+        <div class="setting">
+          <div><b>Volume</b><span class="hint">Mixing amounts and tank volume</span></div>
+          <div class="seg" id="set-vol" role="radiogroup" aria-label="Volume unit"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn small" id="set-all-metric">All metric</button>
+          <button class="btn small" id="set-all-imperial">All imperial</button>
+        </div>
+        <p class="hint" id="set-example"></p>
+      </div>
+      <div class="card">
+        <h2>About</h2>
+        <p class="hint">DevApp keeps everything on this device and works offline. Back up your roll log from the Rolls tab.</p>
       </div>
     </section>
 

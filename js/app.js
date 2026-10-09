@@ -19,7 +19,8 @@ const STORE_KEY = 'filmdev.v1';
 const DEFAULT_STATE = {
   v: 2,
   kitId: DEFAULT_KIT,
-  units: 'metric',
+  tempUnit: 'C', // 'C' | 'F'
+  volUnit: 'ml', // 'ml' | 'oz'
   batches: {}, // kitId -> { mixKey, mixedOn: 'YYYY-MM-DD', rolls }
   kitMeta: {}, // kitId -> { openedOn, portionUsed }
   customFilms: [], // film names typed in with "Other"
@@ -50,15 +51,25 @@ function loadState() {
 }
 
 let state = loadState();
+// Older versions had one metric/imperial switch; split it into two.
+if (state.units) {
+  state.tempUnit = state.units === 'imperial' ? 'F' : 'C';
+  state.volUnit = state.units === 'imperial' ? 'oz' : 'ml';
+  delete state.units;
+  save();
+}
 if (!KITS[state.kitId]) state.kitId = DEFAULT_KIT;
 function save() {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch { /* ignore */ }
 }
 
 const kit = () => KITS[state.kitId];
-const units = () => state.units;
-const T = (t) => fmtTemp(t, units());
-const V = (ml) => fmtVol(ml, units());
+// The formatters take 'metric' | 'imperial'; temperature and volume are set separately.
+const tempUnits = () => (state.tempUnit === 'F' ? 'imperial' : 'metric');
+const volUnits = () => (state.volUnit === 'oz' ? 'imperial' : 'metric');
+const T = (t) => fmtTemp(t, tempUnits());
+const V = (ml) => fmtVol(ml, volUnits());
+const TOL = (tol) => fmtTol(tol, tempUnits());
 const today = () => new Date().toLocaleDateString('sv'); // YYYY-MM-DD, local time
 const fmtDate = (d) => new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 const mixKeys = () => Object.keys(kit().mixes);
@@ -86,10 +97,7 @@ $('#kit').addEventListener('change', () => {
 function renderHeader() {
   $('#kit').value = state.kitId;
   $('#kit').disabled = !!run;
-  segmented($('#units'), ['metric', 'imperial'], units(), (u) => (u === 'metric' ? '°C · ml' : '°F · oz'), (u) => {
-    state.units = u; save(); renderAll();
-  });
-  $('#kit-banner').hidden = kit().verified || !!run || activeTab === 'home' || activeTab === 'rolls';
+  $('#kit-banner').hidden = kit().verified || !!run || activeTab === 'home' || activeTab === 'rolls' || activeTab === 'settings';
 }
 
 // ---------- Tabs ----------
@@ -102,11 +110,13 @@ function showTab(name) {
   activeTab = name;
   try { sessionStorage.setItem(TAB_KEY, name); } catch { /* ignore */ }
   document.querySelectorAll('.tab').forEach((t) => { t.hidden = t.dataset.tab !== name; });
-  document.querySelectorAll('.tabs button, .home-btn').forEach((b) => b.classList.toggle('active', b.dataset.go === name));
+  document.querySelectorAll('.tabs button, .home-btn, .gear-btn').forEach((b) => b.classList.toggle('active', b.dataset.go === name));
   $('.home-btn').setAttribute('aria-current', name === 'home' ? 'page' : 'false');
   moveTabIndicator();
   renderHeader();
   if (name === 'home') renderHome();
+  if (name === 'settings') renderSettings();
+  $('.gear-btn').setAttribute('aria-current', name === 'settings' ? 'page' : 'false');
   if (name === 'batch') renderBatch();
   if (name === 'rolls') renderRolls();
   if (name === 'develop' && !run) syncDevFromBatch();
@@ -229,8 +239,8 @@ function syncDevFromBatch() {
   dev.rotary.checked = state.prefs.rotary;
   $('#dev-rotary-wrap').hidden = !k.rotary;
   $('#dev-tank-wrap').hidden = !k.needsTankVolume;
-  $('#dev-tank-label').textContent = `Tank volume (${units() === 'imperial' ? 'fl oz' : 'ml'})`;
-  dev.tank.value = units() === 'imperial' ? +mlToFlOz(state.prefs.tankMl).toFixed(1) : state.prefs.tankMl;
+  $('#dev-tank-label').textContent = `Tank volume (${state.volUnit === 'oz' ? 'fl oz' : 'ml'})`;
+  dev.tank.value = state.volUnit === 'oz' ? +mlToFlOz(state.prefs.tankMl).toFixed(1) : state.prefs.tankMl;
 
   $('#dev-presteps').replaceChildren(...(k.preSteps ?? []).map((p) => {
     const cb = (preStepChecks[p.id] = el('input', { type: 'checkbox' }));
@@ -279,7 +289,7 @@ function effectiveAgitation(step) {
 }
 
 function stepSub(s) {
-  return [T(s.temp), fmtTol(s.tol, units())].filter(Boolean).join(' ');
+  return [T(s.temp), TOL(s.tol)].filter(Boolean).join(' ');
 }
 
 function noteText(n) {
@@ -337,7 +347,7 @@ dev.rotary.addEventListener('change', () => { state.prefs.rotary = dev.rotary.ch
 dev.tank.addEventListener('input', () => {
   const v = Number(dev.tank.value);
   if (v > 0) {
-    state.prefs.tankMl = Math.round(units() === 'imperial' ? v * ML_PER_FL_OZ : v);
+    state.prefs.tankMl = Math.round(state.volUnit === 'oz' ? v * ML_PER_FL_OZ : v);
     save();
     renderProgram();
   }
@@ -549,7 +559,7 @@ function renderStep() {
   const s = run.steps[run.idx];
   $('#run-stepno').textContent = `Step ${run.idx + 1} of ${run.steps.length}`;
   $('#run-name').textContent = s.name;
-  $('#run-temp').textContent = s.manual ? '' : [T(s.temp), fmtTol(s.tol, units())].filter(Boolean).join(' · ');
+  $('#run-temp').textContent = s.manual ? '' : [T(s.temp), TOL(s.tol)].filter(Boolean).join(' · ');
   $('#run-clock').hidden = !!s.manual;
   setClock(s.sec ?? 0, 0, 'ready');
   setCue(s.manual ? s.text : s.prep ?? '', false);
@@ -934,7 +944,7 @@ function rollCard(e) {
   return el('div', { className: 'card roll' },
     el('div', { className: 'roll-head' }, el('b', { textContent: e.film.name }), e.format ? el('span', { className: 'chip', textContent: e.format }) : null),
     el('div', { className: 'hint', textContent: meta }),
-    e.settings.length ? el('div', { className: 'roll-line', textContent: e.settings.map((x) => settingText(x, units())).join(' · ') }) : null,
+    e.settings.length ? el('div', { className: 'roll-line', textContent: e.settings.map((x) => settingText(x, tempUnits())).join(' · ') }) : null,
     dev ? el('div', { className: 'roll-line', textContent: dev }) : null,
     e.notes ? el('p', { className: 'roll-notes', textContent: e.notes }) : null,
     el('div', { className: 'btn-row' }, edit, del));
@@ -1026,7 +1036,7 @@ function download(name, text, type) {
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
-$('#rolls-csv').addEventListener('click', () => download(`devapp-rolls-${today()}.csv`, logToCSV(sortedLog(), units()), 'text/csv'));
+$('#rolls-csv').addEventListener('click', () => download(`devapp-rolls-${today()}.csv`, logToCSV(sortedLog(), tempUnits()), 'text/csv'));
 $('#rolls-json').addEventListener('click', () => download(`devapp-backup-${today()}.json`,
   JSON.stringify({ app: 'DevApp', version: 1, rolls: rollLog, customFilms: state.customFilms }, null, 2), 'application/json'));
 $('#rolls-import').addEventListener('change', async (ev) => {
@@ -1128,6 +1138,34 @@ function renderHome() {
   $('#tab-home').replaceChildren(...items);
 }
 
+// ---------- Settings ----------
+
+function setUnits(temp, vol) {
+  if (temp) state.tempUnit = temp;
+  if (vol) state.volUnit = vol;
+  save();
+  renderAll();
+}
+
+function renderSettings() {
+  segmented($('#set-temp'), ['C', 'F'], state.tempUnit, (u) => (u === 'C' ? '°C' : '°F'), (u) => setUnits(u, null),
+    (u) => (u === 'C' ? 'Celsius' : 'Fahrenheit'));
+  segmented($('#set-vol'), ['ml', 'oz'], state.volUnit, (u) => (u === 'ml' ? 'ml' : 'fl oz'), (u) => setUnits(null, u),
+    (u) => (u === 'ml' ? 'Millilitres' : 'US fluid ounces'));
+  $('#set-example').textContent = `Example: mix ${V(200)} of developer, process at ${T({ c: 38, f: 100 })}.`;
+}
+$('#set-all-metric').addEventListener('click', () => setUnits('C', 'ml'));
+$('#set-all-imperial').addEventListener('click', () => setUnits('F', 'oz'));
+
+// The gear gives a quarter turn when tapped.
+$('.gear-btn').addEventListener('click', (e) => {
+  const b = e.currentTarget;
+  b.classList.remove('spin');
+  void b.offsetWidth;
+  b.classList.add('spin');
+});
+$('.gear-btn').addEventListener('animationend', (e) => e.currentTarget.classList.remove('spin'));
+
 // ---------- Guide ----------
 
 function renderGuide() {
@@ -1186,6 +1224,7 @@ function renderAll() {
   if (!run) syncDevFromBatch();
   renderGuide();
   if (activeTab === 'home') renderHome();
+  if (activeTab === 'settings') renderSettings();
   if (activeTab === 'batch') renderBatch();
   if (activeTab === 'rolls') renderRolls();
 }

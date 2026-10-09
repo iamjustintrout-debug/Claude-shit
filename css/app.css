@@ -364,3 +364,29 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, .btn:focus-vi
 .program-card[open] summary::after { transform: rotate(225deg) translate(-2px, -1px); }
 .summary-meta { margin-left: auto; font-size: 14px; font-weight: 600; color: var(--violet-bright); }
 .program-card[open] summary { margin-bottom: 10px; }
+
+/* Settings gear (header) */
+.gear-btn {
+  display: grid; place-items: center;
+  width: 44px; height: 44px; padding: 0;
+  border: 0; background: none; color: var(--muted);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: color .25s ease;
+}
+.gear-btn svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; transition: fill .25s ease; }
+.gear-btn:active { transform: scale(.88); }
+/* On Settings: a filled yellow gear. Elsewhere: an outline. */
+.gear-btn.active { color: var(--yellow); }
+.gear-btn.active svg { fill: var(--yellow); }
+.gear-btn.active .gear-hole { fill: var(--bg); }
+.gear-btn.spin svg { animation: gear-spin .5s cubic-bezier(.3, 1.4, .5, 1); }
+@keyframes gear-spin { from { transform: rotate(0); } to { transform: rotate(90deg); } }
+@media (prefers-reduced-motion: reduce) { .gear-btn.spin svg { animation: none; } }
+
+/* Settings page */
+.setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+.setting:first-of-type { border-top: 0; padding-top: 4px; }
+.setting b { display: block; }
+.setting .hint { display: block; margin: 2px 0 0; font-size: 13px; }
+.setting .seg { flex: none; width: 190px; }
+.setting .seg button { padding: 8px 6px; }
