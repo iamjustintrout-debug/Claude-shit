@@ -16,7 +16,7 @@ Pick your chemistry at the top, and the whole app follows it:
 | CineStill Df96 Monobath | B&W | Compiled from published instructions. Check your sheet |
 | CineStill Cs6 Creative Slide | E-6 slide | Compiled from published instructions. Check your sheet |
 
-- **Mix:** a tick-off checklist for each bath. Amounts that couldn't be confirmed show as *see sheet*
+- **Mix:** collapsible, numbered tick-off steps for each bath; a finished bath folds away and the next opens. Amounts that couldn't be confirmed show as *see sheet*
   rather than being guessed.
 - **Develop:** a step-by-step timer.
   - Times adjust to the kit's options (temperature, push, dilution) and to how many rolls the

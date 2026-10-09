@@ -166,32 +166,78 @@ function segmented(container, values, current, label, onPick, sub) {
 
 // ---------- Mix ----------
 
-function mixRow(text, amount) {
+// Ticked mixing steps, kept for the session so switching units or tabs
+// doesn't lose your place. Key: kit|mix|bath -> array of step indexes.
+const MIX_KEY = 'devapp.mixChecks';
+let mixChecks = {};
+try { mixChecks = JSON.parse(sessionStorage.getItem(MIX_KEY)) ?? {}; } catch { /* ignore */ }
+const saveMixChecks = () => { try { sessionStorage.setItem(MIX_KEY, JSON.stringify(mixChecks)); } catch { /* ignore */ } };
+// Which bath sections are open (by key); unset means "open if it's the first unfinished one".
+const mixOpen = {};
+
+function mixRow(n, text, amount, checked, onChange) {
+  const cb = el('input', { type: 'checkbox', checked });
+  cb.addEventListener('change', () => onChange(cb.checked));
   return el('li', {}, el('label', { className: 'check' },
-    el('input', { type: 'checkbox' }),
-    el('span', { textContent: text }),
+    cb,
+    el('span', { className: 'step-no', textContent: n }),
+    el('span', { className: 'step-text', textContent: text }),
     el('span', { className: amount === 'see sheet' ? 'amt muted' : 'amt', textContent: amount })));
 }
 
-function bathCard(bath) {
-  const rows = mixChecklist(bath).map((i) => {
-    if (i.kind === 'water') {
-      return mixRow(i.temp ? `Water (${T(i.temp)})` : 'Water', i.ml == null ? 'see sheet' : V(i.ml));
-    }
+function bathRows(bath) {
+  return mixChecklist(bath).map((i) => {
+    if (i.kind === 'water') return [i.temp ? `Water (${T(i.temp)})` : 'Water', i.ml == null ? 'see sheet' : V(i.ml)];
     if (i.kind === 'part') {
       const whole = /whole packet/.test(i.name);
-      return mixRow(`Add ${i.name}, stir`, i.ml != null ? V(i.ml) : whole ? '' : 'see sheet');
+      return [`Add ${i.name}, stir`, i.ml != null ? V(i.ml) : whole ? '' : 'see sheet'];
     }
-    return mixRow(`Top up with water to ${V(i.final)}`, i.ml != null ? V(i.ml) : '');
+    return [`Top up with water to ${V(i.final)}`, i.ml != null ? V(i.ml) : ''];
   });
+}
+
+// One collapsible section per bath, with numbered steps to tick off.
+function bathCard(bath, key, { number, nested = false, openByDefault = false } = {}) {
+  const rows = bathRows(bath);
+  const done = new Set(mixChecks[key] ?? []);
+  const meta = el('span', { className: 'summary-meta' });
+  const details = el('details', { className: `bath${nested ? '' : ' card'}` });
+  const refresh = () => {
+    const all = rows.length > 0 && done.size >= rows.length;
+    details.classList.toggle('complete', all);
+    meta.textContent = rows.length ? (all ? '✓ Done' : `${done.size}/${rows.length} done`) : '';
+  };
+  const items = rows.map(([text, amount], i) => mixRow(i + 1, text, amount, done.has(i), (on) => {
+    if (on) done.add(i); else done.delete(i);
+    mixChecks[key] = [...done];
+    saveMixChecks();
+    refresh();
+    // Finished this bath: fold it away and open the next unfinished one.
+    if (on && done.size >= rows.length) {
+      setTimeout(() => {
+        details.open = false;
+        mixOpen[key] = false;
+        const next = [...document.querySelectorAll('#mix-baths details.bath')].find((d) => !d.classList.contains('complete'));
+        if (next) { next.open = true; mixOpen[next.dataset.key] = true; next.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+      }, 350);
+    }
+  }));
   const water = totalWater(bath);
-  return el('div', { className: 'card' },
-    el('h3', { textContent: bath.name }),
-    rows.length ? el('ol', { className: 'steps' }, ...rows) : null,
+  details.dataset.key = key;
+  details.append(
+    el('summary', {},
+      number ? el('span', { className: 'bath-no', textContent: number }) : null,
+      el('span', { className: 'bath-name', textContent: bath.name }),
+      meta),
+    rows.length ? el('ol', { className: 'steps' }, ...items) : null,
     ...(bath.notes ?? []).map((n) => el('p', { className: 'hint', textContent: n })),
     bath.final != null ? el('div', { className: 'bath-total' },
       el('span', { textContent: water != null && bath.water ? `Water total: ${V(water)}` : '' }),
       el('span', { textContent: `Working solution: ${V(bath.final)}` })) : null);
+  refresh();
+  details.open = mixOpen[key] ?? (openByDefault || !rows.length);
+  details.addEventListener('toggle', () => { mixOpen[key] = details.open; });
+  return details;
 }
 
 function renderMix() {
@@ -201,10 +247,16 @@ function renderMix() {
     state.prefs.mixKey[state.kitId] = v; save(); renderMix();
   });
   $('#mix-size-hint').textContent = k.mixHint?.(key) ?? '';
-  $('#mix-baths').replaceChildren(...k.mixes[key].baths.map(bathCard));
+  const baths = k.mixes[key].baths;
+  const bathKey = (i) => `${state.kitId}|${key}|${i}`;
+  const isDone = (b, i) => (mixChecks[bathKey(i)] ?? []).length >= bathRows(b).length;
+  const firstOpen = baths.findIndex((b, i) => !isDone(b, i));
+  $('#mix-baths').replaceChildren(...baths.map((b, i) => bathCard(b, bathKey(i), {
+    number: baths.length > 1 ? i + 1 : null, openByDefault: i === firstOpen,
+  })));
 
   $('#mix-extras').replaceChildren(...(k.extras ?? []).map((x) => {
-    const box = el('div', { hidden: true }, bathCard(x.bath));
+    const box = el('div', { hidden: true }, bathCard(x.bath, `${state.kitId}|extra|${x.id}`, { nested: true, openByDefault: true }));
     const cb = el('input', { type: 'checkbox' });
     cb.addEventListener('change', () => { box.hidden = !cb.checked; });
     return el('div', { className: 'card' }, el('label', { className: 'check' }, cb, x.label), box);
@@ -221,7 +273,11 @@ $('#mix-done').addEventListener('click', () => {
   meta.openedOn ??= today();
   meta.portionUsed = Math.min(1, (meta.portionUsed ?? 0) + (kit().mixes[key].portion ?? 1));
   save();
-  document.querySelectorAll('#tab-mix .steps input').forEach((i) => { i.checked = false; });
+  // Start the next mix with a clean checklist.
+  for (const k of Object.keys(mixChecks)) if (k.startsWith(`${state.kitId}|`)) delete mixChecks[k];
+  for (const k of Object.keys(mixOpen)) delete mixOpen[k];
+  saveMixChecks();
+  renderMix();
   showTab('batch');
 });
 

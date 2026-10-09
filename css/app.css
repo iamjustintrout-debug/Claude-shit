@@ -134,7 +134,7 @@ label.check input { width: 22px; height: 22px; margin: 0; accent-color: var(--vi
 .steps label.check { padding: 10px 0; }
 .steps .amt.muted { color: var(--muted); font-weight: 500; font-style: italic; }
 .steps .amt { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.steps input:checked ~ span { color: var(--muted); text-decoration: line-through; }
+.steps input:checked ~ .amt { color: var(--muted); text-decoration: line-through; }
 .bath-total { display: flex; justify-content: space-between; color: var(--muted); font-size: 14px; margin-top: 6px; }
 
 .notes { margin: 0; padding-left: 20px; }
@@ -517,3 +517,37 @@ body.no-scroll { overflow: hidden; }
   font-size: 24px; line-height: 1; cursor: pointer;
 }
 .viewer-btn:disabled { opacity: .3; }
+
+/* Mix: collapsible baths with numbered steps */
+details.bath summary {
+  display: flex; align-items: center; gap: 10px;
+  list-style: none; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+details.bath summary::-webkit-details-marker { display: none; }
+details.bath summary::after {
+  content: ''; flex: none; width: 9px; height: 9px; margin-left: 2px;
+  border-right: 2px solid var(--violet-bright); border-bottom: 2px solid var(--violet-bright);
+  transform: rotate(45deg) translateY(-3px); transition: transform .25s ease;
+}
+details.bath[open] summary::after { transform: rotate(225deg) translate(-2px, -1px); }
+details.bath[open] summary { margin-bottom: 10px; }
+.bath-name { font-size: 16px; font-weight: 700; color: var(--violet-bright); }
+.bath-no {
+  flex: none; display: grid; place-items: center;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--yellow); color: var(--accent-text);
+  font-size: 14px; font-weight: 800;
+}
+details.bath .summary-meta { margin-left: auto; }
+details.bath.complete .summary-meta { color: var(--ok); }
+details.bath.complete .bath-no { background: var(--ok); }
+.step-no {
+  flex: none; display: grid; place-items: center;
+  width: 24px; height: 24px; border-radius: 7px;
+  background: var(--violet-dim); border: 1px solid var(--violet);
+  color: var(--violet-bright); font-size: 13px; font-weight: 800;
+}
+.steps input:checked ~ .step-no { background: transparent; border-color: var(--line); color: var(--muted); }
+.steps input:checked ~ .step-text { color: var(--muted); text-decoration: line-through; }
+.step-text { flex: 1; }
