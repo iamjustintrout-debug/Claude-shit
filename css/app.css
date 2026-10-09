@@ -480,3 +480,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, .btn:focus-vi
 }
 .switch:checked { background: var(--yellow); }
 .switch:checked::after { transform: translateX(20px); }
+
+.setting.stack { flex-direction: column; align-items: stretch; }
+.setting.stack .seg { width: auto; margin-top: 10px; }

@@ -26,7 +26,7 @@ const DEFAULT_STATE = {
   customFilms: [], // film names typed in with "Other"
   prefs: {
     mixKey: {}, opts: {}, rotary: false, tankMl: 500, agit: 'kit', film: {}, format: '35mm',
-    alarm: true, beeps: true, miniTimer: true,
+    alarm: true, beeps: true, miniTimer: true, awake: 'dev', // awake: 'off' | 'dev' | 'always'
   },
 };
 
@@ -450,7 +450,7 @@ function startRun(idx) {
   $('#dev-run').hidden = false;
   renderHeader();
   enterStep();
-  keepAwake(true);
+  keepAwake();
   window.scrollTo(0, 0);
 }
 
@@ -695,7 +695,7 @@ function finishRun() {
   $('#done-film').textContent = `${run.films.map((f) => f.name).join(' + ')} · ${run.format}`;
   $('#done-notes').value = '';
   $('#done-log').textContent = `Save to roll log (${total} of ${kit().mixes[mixKey].rolls} used)`;
-  keepAwake(false);
+  keepAwake();
 }
 
 function endRun() {
@@ -704,7 +704,7 @@ function endRun() {
   stopAlarm();
   persistRun();
   stopTilt();
-  keepAwake(false);
+  keepAwake();
   $('#dev-run').hidden = true;
   $('#dev-done').hidden = true;
   $('#dev-setup').hidden = false;
@@ -859,7 +859,7 @@ function restoreRun() {
   } else if (run.phase === 'ended') {
     finishStep(true);
   }
-  keepAwake(true);
+  keepAwake();
   // Audio can only start after a tap.
   document.addEventListener('pointerdown', () => { unlockAudio(); startTilt(); }, { once: true });
   return true;
@@ -869,7 +869,7 @@ function restoreRun() {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     if (run?.phase === 'running') { clearTimeout(run.timer); tick(); }
-    if (run) keepAwake(true);
+    keepAwake();
   }
 });
 
@@ -952,10 +952,30 @@ function stopAlarm() {
   document.removeEventListener('pointerdown', stopAlarm, { capture: true });
 }
 
+// ---------- Keep the screen awake ----------
+// Setting: off, while developing, or always while the app is open.
+// Uses the Screen Wake Lock API. Home-screen apps on older iOS ignore it, so
+// on iOS a silent, invisible 4-second video also loops while awake is wanted
+// (playing video stops the screen from dimming or locking).
+
+const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const AWAKE_VIDEO = 'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAM0bW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAD6AAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAl50cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAD6AAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAABAAAAAQAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAA+gAAAAAAABAAAAAAHWbWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAABAAAABAABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABgW1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAUFzdGJsAAAAuXN0c2QAAAAAAAAAAQAAAKlhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAABAAEABIAAAASAAAAAAAAAABFUxhdmM2MC4zMS4xMDIgbGlieDI2NAAAAAAAAAAAAAAAGP//AAAAL2F2Y0MBQsAe/+EAFmdCwB7ZHsBEAAADAAQAAAMACDxYuSABAAZoy4BlEyAAAAAQcGFzcAAAAAEAAAABAAAAFGJ0cnQAAAAAAAAFTAAABUwAAAAYc3R0cwAAAAAAAAABAAAABAAAQAAAAAAUc3RzcwAAAAAAAAABAAAAAQAAABxzdHNjAAAAAAAAAAEAAAABAAAABAAAAAEAAAAkc3RzegAAAAAAAAAAAAAABAAAAoYAAAALAAAACwAAAAoAAAAUc3RjbwAAAAAAAAABAAADZAAAAGJ1ZHRhAAAAWm1ldGEAAAAAAAAAIWhkbHIAAAAAAAAAAG1kaXJhcHBsAAAAAAAAAAAAAAAALWlsc3QAAAAlqXRvbwAAAB1kYXRhAAAAAQAAAABMYXZmNjAuMTYuMTAwAAAACGZyZWUAAAKubWRhdAAAAnIGBf//btxF6b3m2Ui3lizYINkj7u94MjY0IC0gY29yZSAxNjQgcjMxMDggMzFlMTlmOSAtIEguMjY0L01QRUctNCBBVkMgY29kZWMgLSBDb3B5bGVmdCAyMDAzLTIwMjMgLSBodHRwOi8vd3d3LnZpZGVvbGFuLm9yZy94MjY0Lmh0bWwgLSBvcHRpb25zOiBjYWJhYz0wIHJlZj0zIGRlYmxvY2s9MTotMzotMyBhbmFseXNlPTB4MToweDExMSBtZT1oZXggc3VibWU9NyBwc3k9MSBwc3lfcmQ9Mi4wMDowLjcwIG1peGVkX3JlZj0xIG1lX3JhbmdlPTE2IGNocm9tYV9tZT0xIHRyZWxsaXM9MSA4eDhkY3Q9MCBjcW09MCBkZWFkem9uZT0yMSwxMSBmYXN0X3Bza2lwPTEgY2hyb21hX3FwX29mZnNldD0tNCB0aHJlYWRzPTEgbG9va2FoZWFkX3RocmVhZHM9MSBzbGljZWRfdGhyZWFkcz0wIG5yPTAgZGVjaW1hdGU9MSBpbnRlcmxhY2VkPTAgYmx1cmF5X2NvbXBhdD0wIGNvbnN0cmFpbmVkX2ludHJhPTAgYmZyYW1lcz0wIHdlaWdodHA9MCBrZXlpbnQ9MjUwIGtleWludF9taW49MSBzY2VuZWN1dD00MCBpbnRyYV9yZWZyZXNoPTAgcmNfbG9va2FoZWFkPTQwIHJjPWNyZiBtYnRyZWU9MSBjcmY9NTEuMCBxY29tcD0wLjYwIHFwbWluPTAgcXBtYXg9NjkgcXBzdGVwPTQgaXBfcmF0aW89MS40MCBhcT0xOjEuMjAAgAAAAAxliIQGs5yYoAAiS4AAAAAHQZo4DWc6gAAAAAdBmlQDOc6gAAAABkGaYBjOdQ==';
 let wakeLock = null;
-async function keepAwake(on) {
+let awakeVideo = null;
+
+function wantAwake() {
+  const mode = state.prefs.awake;
+  return mode === 'always' || (mode === 'dev' && !!run && !run.done);
+}
+
+// Callers used to pass on/off; the setting and run state now decide.
+function keepAwake() {
+  applyAwake(wantAwake());
+}
+
+async function applyAwake(on) {
   try {
-    if (on && !wakeLock && 'wakeLock' in navigator) {
+    if (on && !wakeLock && 'wakeLock' in navigator && document.visibilityState === 'visible') {
       wakeLock = await navigator.wakeLock.request('screen');
       wakeLock.addEventListener('release', () => { wakeLock = null; });
     } else if (!on && wakeLock) {
@@ -963,7 +983,24 @@ async function keepAwake(on) {
       wakeLock = null;
     }
   } catch { /* denied or unsupported */ }
+  if (!isIOS) return;
+  if (on) {
+    if (!awakeVideo) {
+      awakeVideo = el('video', { src: AWAKE_VIDEO, muted: true, loop: true, playsInline: true });
+      awakeVideo.setAttribute('playsinline', '');
+      awakeVideo.setAttribute('muted', '');
+      awakeVideo.setAttribute('aria-hidden', 'true');
+      awakeVideo.style.cssText = 'position:fixed;left:0;bottom:0;width:1px;height:1px;opacity:.01;pointer-events:none';
+      document.body.append(awakeVideo);
+    }
+    if (awakeVideo.paused) awakeVideo.play().catch(() => { /* needs a tap first; retried on the next one */ });
+  } else if (awakeVideo && !awakeVideo.paused) {
+    awakeVideo.pause();
+  }
 }
+
+// iOS only starts video after a tap, so retry on taps while awake is wanted.
+document.addEventListener('pointerdown', () => { if (wantAwake()) keepAwake(); }, { passive: true });
 
 // ---------- Batch ----------
 
@@ -1293,6 +1330,13 @@ function renderSettings() {
   $('#set-alarm').checked = state.prefs.alarm;
   $('#set-beeps').checked = state.prefs.beeps;
   $('#set-mini').checked = state.prefs.miniTimer;
+  segmented($('#set-awake'), ['off', 'dev', 'always'], state.prefs.awake,
+    (v) => ({ off: 'Off', dev: 'Developing', always: 'Always' })[v], (v) => {
+      state.prefs.awake = v;
+      save();
+      keepAwake();
+      renderSettings();
+    }, (v) => ({ off: 'Normal lock', dev: 'During a run', always: 'While open' })[v]);
   segmented($('#set-temp'), ['C', 'F'], state.tempUnit, (u) => (u === 'C' ? '°C' : '°F'), (u) => setUnits(u, null),
     (u) => (u === 'C' ? 'Celsius' : 'Fahrenheit'));
   segmented($('#set-vol'), ['ml', 'oz'], state.volUnit, (u) => (u === 'ml' ? 'ml' : 'fl oz'), (u) => setUnits(null, u),
@@ -1391,6 +1435,7 @@ const restored = restoreRun();
 let lastTab = null;
 try { lastTab = sessionStorage.getItem(TAB_KEY); } catch { /* ignore */ }
 renderAll();
+keepAwake();
 showTab(restored ? 'develop' : document.querySelector(`.tab[data-tab="${lastTab}"]`) ? lastTab : 'home');
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
