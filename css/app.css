@@ -256,7 +256,8 @@ label textarea { resize: vertical; }
   position: fixed;
   z-index: 10;
   left: 50%;
-  bottom: max(10px, calc(env(safe-area-inset-bottom) - 8px));
+  /* --viewport-gap: see fixViewportGap() in app.js */
+  bottom: calc(max(10px, calc(env(safe-area-inset-bottom) - 8px)) - var(--viewport-gap, 0px));
   transform: translateX(-50%);
   width: min(calc(100% - 24px), 480px);
   display: flex;

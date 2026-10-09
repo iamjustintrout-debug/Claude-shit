@@ -1148,6 +1148,25 @@ function renderGuide() {
     : `Compiled from the ${k.source}. Not checked against the printed sheet. Always follow the sheet that came with your kit.`;
 }
 
+// ---------- iOS home-screen viewport fix ----------
+// Launched from the home screen, iOS sometimes lays a page that doesn't
+// scroll out in a viewport shorter than the screen (by the status-bar
+// height), so the bottom tab bar floats too high. Measure the missing strip
+// and move the bar down by it. Elsewhere the gap is 0.
+function fixViewportGap() {
+  const standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+  const portrait = window.innerHeight > window.innerWidth;
+  const missing = screen.height - window.innerHeight;
+  const gap = standalone && portrait && missing > 0 && missing < 120 ? missing : 0;
+  document.documentElement.style.setProperty('--viewport-gap', `${gap}px`);
+}
+fixViewportGap();
+window.addEventListener('resize', fixViewportGap);
+window.visualViewport?.addEventListener('resize', fixViewportGap);
+window.addEventListener('scroll', fixViewportGap, { passive: true });
+window.addEventListener('pageshow', fixViewportGap);
+document.addEventListener('visibilitychange', fixViewportGap);
+
 // ---------- Boot ----------
 
 function renderAll() {
