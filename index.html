@@ -85,7 +85,8 @@
           <div id="dev-error" class="error" hidden></div>
           <ol id="dev-program" class="program"></ol>
           <ul id="dev-notes" class="notes"></ul>
-          <button class="btn primary wide" id="dev-start">Start</button>
+          <p class="hint">Tap any step to jump straight to its timer.</p>
+          <button class="btn primary wide" id="dev-start">Start all steps</button>
         </div>
       </div>
 
@@ -96,7 +97,21 @@
         </div>
         <h2 class="run-name" id="run-name"></h2>
         <p class="run-temp" id="run-temp"></p>
-        <div class="clock" id="run-clock">0:00</div>
+        <div class="clock" id="run-clock" role="timer">
+          <svg viewBox="0 0 360 136" aria-hidden="true">
+            <defs>
+              <clipPath id="digits-clip"><text class="digits" x="180" y="120" id="clock-clip-text">0:00</text></clipPath>
+            </defs>
+            <text class="digits empty" x="180" y="120" id="clock-text">0:00</text>
+            <g clip-path="url(#digits-clip)">
+              <g id="liquid">
+                <path class="wave back" id="wave-back"/>
+                <path class="wave front" id="wave-front"/>
+              </g>
+            </g>
+          </svg>
+          <span class="sr-only" id="clock-sr">0:00</span>
+        </div>
         <div class="cue" id="run-cue"></div>
         <div class="run-actions">
           <button class="btn primary big" id="run-go">Start step</button>

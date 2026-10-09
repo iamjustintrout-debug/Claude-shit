@@ -140,14 +140,30 @@ label.check input { width: 22px; height: 22px; margin: 0; accent-color: var(--ac
 .run-head { display: flex; justify-content: space-between; align-items: center; color: var(--muted); }
 .run-name { font-size: 26px; margin: 16px 0 4px; }
 .run-temp { color: var(--muted); margin: 0; }
-.clock {
-  font-size: min(28vw, 140px);
-  font-weight: 700;
+.clock { margin: 16px auto 8px; max-width: 520px; }
+.clock svg { display: block; width: 100%; height: auto; overflow: visible; }
+.digits {
+  font: 800 120px/1 -apple-system, BlinkMacSystemFont, "SF Pro Rounded", "Segoe UI", Roboto, sans-serif;
   font-variant-numeric: tabular-nums;
-  line-height: 1;
-  margin: 24px 0 12px;
+  text-anchor: middle;
 }
-.clock.warn { color: var(--accent); }
+.digits.empty { fill: rgba(255, 255, 255, .06); stroke: #4a4a4a; stroke-width: 1.5px; }
+.clock.warn .digits.empty, .clock.done .digits.empty { stroke: var(--accent); }
+#liquid { transition: transform .3s linear; }
+.wave.front { fill: var(--accent); animation: wave 2.4s linear infinite; }
+.wave.back { fill: #9a5e12; animation: wave 3.6s linear infinite reverse; }
+@keyframes wave { from { transform: translateX(0); } to { transform: translateX(-240px); } }
+.clock.paused .wave, .clock.ready .wave { animation-play-state: paused; }
+.clock.done svg { animation: pulse 1s ease-in-out 3; }
+@keyframes pulse { 50% { transform: scale(1.04); } }
+@media (prefers-reduced-motion: reduce) {
+  .wave, .clock.done svg { animation: none; }
+  #liquid { transition: none; }
+}
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.program li[role="button"] { cursor: pointer; border-radius: 8px; }
+.program li[role="button"]:active { background: #2a2a2a; }
+.program .play { margin-left: 8px; font-size: 12px; color: var(--muted); }
 .cue { min-height: 3em; font-size: 20px; font-weight: 600; color: var(--accent); }
 .cue.flash { animation: flash .6s ease-out; }
 @keyframes flash { from { background: var(--accent); color: var(--accent-text); } to { background: transparent; } }

@@ -266,11 +266,21 @@ function renderProgram() {
   err.textContent = prog.error ?? '';
   $('#dev-start').disabled = !!prog.error;
 
-  $('#dev-program').replaceChildren(...(prog.steps ?? []).map((s) => el('li', { className: s.critical ? 'crit' : '' },
-    el('span', {}, s.name,
-      s.unverified ? el('span', { className: 'badge', textContent: 'check sheet' }) : null,
-      el('span', { className: 'sub', textContent: s.manual ? 'Manual step' : stepSub(s) })),
-    el('span', { className: 't', textContent: s.manual ? '—' : formatDuration(s.sec) }))));
+  $('#dev-program').replaceChildren(...(prog.steps ?? []).map((s, i) => {
+    const li = el('li', { className: s.critical ? 'crit' : '' },
+      el('span', {}, s.name,
+        s.unverified ? el('span', { className: 'badge', textContent: 'check sheet' }) : null,
+        el('span', { className: 'sub', textContent: s.manual ? 'Manual step' : stepSub(s) })),
+      el('span', { className: 't' }, s.manual ? '—' : formatDuration(s.sec), prog.error ? null : el('span', { className: 'play', textContent: '▶' })));
+    if (!prog.error) {
+      li.tabIndex = 0;
+      li.setAttribute('role', 'button');
+      li.setAttribute('aria-label', `Start from ${s.name}`);
+      li.addEventListener('click', () => startRun(i));
+      li.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startRun(i); } });
+    }
+    return li;
+  }));
   $('#dev-notes').replaceChildren(...(prog.notes ?? []).map((n) => el('li', { textContent: noteText(n) })));
 }
 
@@ -292,17 +302,52 @@ dev.tank.addEventListener('input', () => {
 
 let run = null;
 
-$('#dev-start').addEventListener('click', () => {
+$('#dev-start').addEventListener('click', () => startRun(0));
+
+function startRun(idx) {
   const prog = currentProgram();
   if (prog.error) return;
-  run = { opts: prog.opts, steps: prog.steps, idx: 0 };
+  run = { opts: prog.opts, steps: prog.steps, idx };
   unlockAudio();
   $('#dev-setup').hidden = true;
   $('#dev-run').hidden = false;
   renderHeader();
   enterStep();
   keepAwake(true);
-});
+  window.scrollTo(0, 0);
+}
+
+// ---------- Liquid-filled clock ----------
+
+// Digits sit between y=34 (top) and y=120 (baseline) in the SVG viewBox.
+const DIGIT_TOP = 34;
+const DIGIT_BOTTOM = 120;
+const WAVE_AMP = 5;
+
+function wavePath(amp, length, phase) {
+  // A sine wave from x=0 to 960 (seamless when shifted by a multiple of `length`),
+  // closed downward into a solid body.
+  let d = `M0 ${amp * Math.sin(phase)}`;
+  for (let x = 10; x <= 960; x += 10) d += ` L${x} ${(amp * Math.sin((x / length) * 2 * Math.PI + phase)).toFixed(2)}`;
+  return `${d} L960 200 L0 200 Z`;
+}
+$('#wave-front').setAttribute('d', wavePath(WAVE_AMP, 120, 0));
+$('#wave-back').setAttribute('d', wavePath(WAVE_AMP, 120, Math.PI));
+
+// progress 0 = empty, 1 = full.
+function setClock(sec, progress, state = '') {
+  const text = formatDuration(sec);
+  $('#clock-text').textContent = text;
+  $('#clock-clip-text').textContent = text;
+  $('#clock-sr').textContent = text;
+  const p = Math.min(1, Math.max(0, progress));
+  // Margins clear the round digits' overshoot so 0% is truly empty and 100% truly full.
+  const empty = DIGIT_BOTTOM + 2 * WAVE_AMP + 4;
+  const full = DIGIT_TOP - 2 * WAVE_AMP - 4;
+  const y = empty - p * (empty - full);
+  $('#liquid').style.transform = `translateY(${y.toFixed(2)}px)`;
+  $('#run-clock').className = `clock ${state}`;
+}
 
 function enterStep() {
   const s = run.steps[run.idx];
@@ -311,10 +356,9 @@ function enterStep() {
   $('#run-name').textContent = s.name;
   $('#run-temp').textContent = s.manual ? '' : [T(s.temp), fmtTol(s.tol, units())].filter(Boolean).join(' · ');
   $('#run-clock').hidden = !!s.manual;
-  $('#run-clock').classList.remove('warn');
-  $('#run-clock').textContent = formatDuration(s.sec ?? 0);
+  setClock(s.sec ?? 0, 0, 'ready');
   setCue(s.manual ? s.text : s.prep ?? '', false);
-  $('#run-go').textContent = s.manual ? 'Done' : 'Start step';
+  $('#run-go').textContent = s.manual ? 'Done' : 'Start timer';
   $('#run-go').hidden = false;
   $('#run-pause').hidden = true;
   const next = run.steps[run.idx + 1];
@@ -349,9 +393,7 @@ function tick() {
   const s = run.steps[run.idx];
   run.remaining = Math.max(0, (run.endAt - Date.now()) / 1000);
   const elapsed = s.sec - run.remaining;
-  const clock = $('#run-clock');
-  clock.textContent = formatDuration(run.remaining);
-  clock.classList.toggle('warn', run.remaining <= 10);
+  setClock(run.remaining, elapsed / s.sec, run.remaining <= 10 ? 'warn' : '');
 
   const a = run.agit;
   const cues = agitationCues(s.sec, a);
@@ -378,6 +420,7 @@ function tick() {
 
 function finishStep() {
   run.phase = 'ended';
+  setClock(0, 1, 'done');
   beep(1046, 400, 3); vibrate([300, 150, 300, 150, 300]);
   const last = run.idx === run.steps.length - 1;
   setCue(last ? 'Done. Drain the tank' : 'Drain the tank');
@@ -404,6 +447,7 @@ $('#run-pause').addEventListener('click', () => {
     clearTimeout(run.timer);
     run.remaining = Math.max(0, (run.endAt - Date.now()) / 1000);
     run.phase = 'paused';
+    $('#run-clock').classList.add('paused');
     $('#run-pause').textContent = 'Resume';
   } else if (run.phase === 'paused') {
     startTimer();
