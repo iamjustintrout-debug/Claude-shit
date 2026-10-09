@@ -232,3 +232,23 @@ label textarea { resize: vertical; }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 .file-btn { cursor: pointer; }
 .tabs button { padding: 16px 0; font-size: 15px; }
+
+/* Home button & dashboard */
+.home-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 0; border: 0; background: none; color: var(--accent);
+  font: inherit; font-weight: 700; cursor: pointer;
+}
+.home-btn svg { width: 22px; height: 22px; fill: currentColor; }
+.section-title { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 20px 4px 4px; }
+.chem { display: grid; gap: 6px; }
+.chem.selected { border: 1px solid var(--accent); }
+.chem-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.chem-head b { font-size: 18px; margin-right: 8px; }
+.chem-count .big-num { font-size: 34px; }
+.status { font-size: 13px; font-weight: 700; }
+.warn-text { color: var(--accent); }
+.recent { list-style: none; margin: 0; padding: 0; }
+.recent li { padding: 6px 0; border-top: 1px solid var(--line); }
+.recent li:first-child { border-top: 0; }
+.btn-row .hint { margin: 0; align-self: center; flex: 1; }

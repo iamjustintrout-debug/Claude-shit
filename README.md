@@ -2,6 +2,10 @@
 
 A phone app for mixing film-developing chemistry and timing the process.
 
+It opens to a **dashboard** of your mixed chemistry: rolls developed, rolls left, mix date, use-by
+date and the next roll's developer time. Tap the DevApp logo to return to it. Reopening the app
+while it's still open returns to where you were, and a timer that was running carries on.
+
 Pick your chemistry at the top, and the whole app follows it:
 
 | Kit | Process | Source status |

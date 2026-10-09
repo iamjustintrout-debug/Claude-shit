@@ -66,9 +66,9 @@ const currentMixKey = () => {
   const k = state.prefs.mixKey[state.kitId];
   return kit().mixes[k] ? k : mixKeys().at(-1);
 };
-const kitOpts = () => {
-  const saved = state.prefs.opts[state.kitId] ?? {};
-  return Object.fromEntries(kit().options.map((o) => [o.id, o.choices.some((c) => c.value === saved[o.id]) ? saved[o.id] : o.default]));
+const kitOpts = (k = kit()) => {
+  const saved = state.prefs.opts[k.id] ?? {};
+  return Object.fromEntries(k.options.map((o) => [o.id, o.choices.some((c) => c.value === saved[o.id]) ? saved[o.id] : o.default]));
 };
 const batch = () => state.batches[state.kitId] ?? null;
 const choiceLabel = (l) => (typeof l === 'object' ? T(l) : l);
@@ -89,22 +89,28 @@ function renderHeader() {
   segmented($('#units'), ['metric', 'imperial'], units(), (u) => (u === 'metric' ? '°C · ml' : '°F · oz'), (u) => {
     state.units = u; save(); renderAll();
   });
-  $('#kit-banner').hidden = kit().verified || !!run;
+  $('#kit-banner').hidden = kit().verified || !!run || activeTab === 'home' || activeTab === 'rolls';
 }
 
 // ---------- Tabs ----------
 
-let activeTab = 'mix';
+// A fresh launch opens the dashboard; reopening (or a reload) while the app
+// is still open returns to the last tab, via sessionStorage.
+const TAB_KEY = 'devapp.tab';
+let activeTab = 'home';
 function showTab(name) {
   activeTab = name;
+  try { sessionStorage.setItem(TAB_KEY, name); } catch { /* ignore */ }
   document.querySelectorAll('.tab').forEach((t) => { t.hidden = t.dataset.tab !== name; });
   document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('active', b.dataset.go === name));
+  renderHeader();
+  if (name === 'home') renderHome();
   if (name === 'batch') renderBatch();
   if (name === 'rolls') renderRolls();
   if (name === 'develop' && !run) syncDevFromBatch();
   window.scrollTo(0, 0);
 }
-document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.go)));
+document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.go)));
 
 function segmented(container, values, current, label, onPick, sub) {
   container.replaceChildren(...values.map((v) => {
@@ -381,7 +387,11 @@ $('#dev-start').addEventListener('click', () => startRun(0));
 function startRun(idx) {
   const prog = currentProgram();
   if (prog.error) return;
-  run = { opts: prog.opts, steps: prog.steps, idx };
+  run = {
+    opts: prog.opts, steps: prog.steps, idx,
+    films: devFilmPickers.map((p) => p.get() ?? { id: null, name: 'Unknown film' }),
+    format: $('#dev-format').value,
+  };
   unlockAudio();
   $('#dev-setup').hidden = true;
   $('#dev-run').hidden = false;
@@ -426,6 +436,12 @@ function setClock(sec, progress, state = '') {
 function enterStep() {
   const s = run.steps[run.idx];
   Object.assign(run, { phase: 'ready', remaining: s.sec, endAt: 0, lastCue: -1, midShown: false, warned: false, agit: effectiveAgitation(s) });
+  renderStep();
+  persistRun();
+}
+
+function renderStep() {
+  const s = run.steps[run.idx];
   $('#run-stepno').textContent = `Step ${run.idx + 1} of ${run.steps.length}`;
   $('#run-name').textContent = s.name;
   $('#run-temp').textContent = s.manual ? '' : [T(s.temp), fmtTol(s.tol, units())].filter(Boolean).join(' · ');
@@ -452,6 +468,7 @@ function startTimer() {
   $('#run-go').hidden = true;
   $('#run-pause').hidden = false;
   $('#run-pause').textContent = 'Pause';
+  persistRun();
   if (!resuming) {
     const a = run.agit;
     if (a?.continuous) setCue(a.label?.startsWith('Rotate') ? 'Rotate continuously' : 'Agitate continuously');
@@ -476,6 +493,7 @@ function tick() {
     cues.forEach((t, i) => { if (t <= elapsed) due = i; });
     if (due > run.lastCue && run.remaining > 10) {
       run.lastCue = due;
+      persistRun();
       setCue(a.cue ?? 'Agitate');
       beep(880, 120); vibrate(150);
     } else if (!run.midShown && a.initial && elapsed >= a.initial && due === -1) {
@@ -485,6 +503,7 @@ function tick() {
   }
   if (!run.warned && run.remaining <= 10 && s.sec > 20) {
     run.warned = true;
+    persistRun();
     setCue('10 s left. Get ready to drain');
     beep(880, 100, 2); vibrate([100, 80, 100]);
   }
@@ -492,10 +511,11 @@ function tick() {
   run.timer = setTimeout(tick, 200);
 }
 
-function finishStep() {
+function finishStep(silent = false) {
   run.phase = 'ended';
+  persistRun();
   setClock(0, 1, 'done');
-  beep(1046, 400, 3); vibrate([300, 150, 300, 150, 300]);
+  if (!silent) { beep(1046, 400, 3); vibrate([300, 150, 300, 150, 300]); }
   const last = run.idx === run.steps.length - 1;
   setCue(last ? 'Done. Drain the tank' : 'Drain the tank');
   $('#run-pause').hidden = true;
@@ -521,6 +541,7 @@ $('#run-pause').addEventListener('click', () => {
     clearTimeout(run.timer);
     run.remaining = Math.max(0, (run.endAt - Date.now()) / 1000);
     run.phase = 'paused';
+    persistRun();
     $('#run-clock').classList.add('paused');
     $('#run-pause').textContent = 'Resume';
   } else if (run.phase === 'paused') {
@@ -543,8 +564,9 @@ function finishRun() {
   $('#dev-done').hidden = false;
   const { firstRoll, rolls, mixKey } = run.opts;
   const total = firstRoll - 1 + rolls;
-  run.films = devFilmPickers.map((p) => p.get() ?? { id: null, name: 'Unknown film' });
-  $('#done-film').textContent = `${run.films.map((f) => f.name).join(' + ')} · ${$('#dev-format').value}`;
+  run.done = true;
+  persistRun();
+  $('#done-film').textContent = `${run.films.map((f) => f.name).join(' + ')} · ${run.format}`;
   $('#done-notes').value = '';
   $('#done-log').textContent = `Save to roll log (${total} of ${kit().mixes[mixKey].rolls} used)`;
   keepAwake(false);
@@ -553,6 +575,7 @@ function finishRun() {
 function endRun() {
   if (run) clearTimeout(run.timer);
   run = null;
+  persistRun();
   keepAwake(false);
   $('#dev-run').hidden = true;
   $('#dev-done').hidden = true;
@@ -569,7 +592,7 @@ $('#done-log').addEventListener('click', () => {
   rememberCustomFilms(run.films);
   rollLog.push(...makeLogEntries({
     kit: kit(), opts: run.opts, steps: run.steps, films: run.films,
-    format: $('#dev-format').value, notes: $('#done-notes').value.trim(),
+    format: run.format, notes: $('#done-notes').value.trim(),
   }));
   saveLog();
   save();
@@ -577,6 +600,58 @@ $('#done-log').addEventListener('click', () => {
   showTab('rolls');
 });
 $('#done-back').addEventListener('click', endRun);
+
+// ---------- Keep a run across app restarts ----------
+// iOS may close a backgrounded web app. Save the run so reopening picks up
+// where it left off (the countdown continues from its absolute end time).
+
+const RUN_KEY = 'devapp.run';
+const RUN_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
+function persistRun() {
+  try {
+    if (!run) return localStorage.removeItem(RUN_KEY);
+    const { timer, ...data } = run;
+    localStorage.setItem(RUN_KEY, JSON.stringify({ ...data, kitId: state.kitId, savedAt: Date.now() }));
+  } catch { /* ignore */ }
+}
+
+function restoreRun() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(RUN_KEY)); } catch { /* ignore */ }
+  if (!saved || !KITS[saved.kitId] || !Array.isArray(saved.steps) || !saved.steps[saved.idx]
+    || Date.now() - saved.savedAt > RUN_MAX_AGE_MS) {
+    try { localStorage.removeItem(RUN_KEY); } catch { /* ignore */ }
+    return false;
+  }
+  const { savedAt, kitId, ...data } = saved;
+  state.kitId = kitId;
+  run = data;
+  $('#dev-setup').hidden = true;
+  if (run.done) {
+    finishRun();
+    return true;
+  }
+  $('#dev-run').hidden = false;
+  renderStep();
+  const s = run.steps[run.idx];
+  if (run.phase === 'running') {
+    $('#run-go').hidden = true;
+    $('#run-pause').hidden = false;
+    if (run.endAt <= Date.now()) { run.remaining = 0; finishStep(true); } else tick();
+  } else if (run.phase === 'paused') {
+    setClock(run.remaining, 1 - run.remaining / s.sec, 'paused');
+    $('#run-go').hidden = true;
+    $('#run-pause').hidden = false;
+    $('#run-pause').textContent = 'Resume';
+  } else if (run.phase === 'ended') {
+    finishStep(true);
+  }
+  keepAwake(true);
+  // Audio can only start after a tap.
+  document.addEventListener('pointerdown', unlockAudio, { once: true });
+  return true;
+}
 
 // Timers are throttled in the background; catch up immediately on return.
 document.addEventListener('visibilitychange', () => {
@@ -869,6 +944,84 @@ $('#rolls-import').addEventListener('change', async (ev) => {
   }
 });
 
+// ---------- Home dashboard ----------
+
+function chemCard(k, b) {
+  const mix = k.mixes[b.mixKey];
+  const cap = mix?.rolls ?? 0;
+  const left = Math.max(0, cap - b.rolls);
+  const ageDays = -daysUntil(b.mixedOn);
+  const exp = batchExpiry(k, b.mixedOn).sort((x, y) => x.date - y.date)[0];
+  const expDays = exp ? daysUntil(exp.date) : null;
+  const status = left === 0 ? { text: 'Used up', cls: 'bad' }
+    : expDays != null && expDays < 0 ? { text: 'Expired', cls: 'bad' }
+      : expDays != null && expDays <= 7 ? { text: 'Expiring soon', cls: 'warn-text' }
+        : { text: 'Active', cls: 'ok' };
+
+  let next = null;
+  if (left > 0) {
+    const prog = buildProgram(k, { ...kitOpts(k), mixKey: b.mixKey, firstRoll: b.rolls + 1, rolls: 1, tankMl: state.prefs.tankMl });
+    const d = prog.steps?.find((x) => x.critical);
+    if (d) next = `Next: roll #${b.rolls + 1} · ${d.name} ${formatDuration(d.sec)} at ${T(d.temp)}`;
+  }
+
+  const go = el('button', { className: 'btn primary small', textContent: left > 0 ? 'Develop' : 'Mix new batch' });
+  go.addEventListener('click', () => { selectKit(k.id); showTab(left > 0 ? 'develop' : 'mix'); });
+  const details = el('button', { className: 'btn small', textContent: 'Batch details' });
+  details.addEventListener('click', () => { selectKit(k.id); showTab('batch'); });
+
+  return el('div', { className: `card chem${k.id === state.kitId ? ' selected' : ''}` },
+    el('div', { className: 'chem-head' },
+      el('div', {}, el('b', { textContent: k.name }), el('span', { className: 'chip', textContent: k.process })),
+      el('span', { className: `status ${status.cls}`, textContent: status.text })),
+    el('div', { className: 'hint', textContent: `${mix?.label ?? b.mixKey} · mixed ${fmtDate(b.mixedOn)} (${ageDays === 0 ? 'today' : `${ageDays} day${ageDays === 1 ? '' : 's'} ago`})` }),
+    el('div', { className: 'chem-count' },
+      el('span', { className: 'big-num', textContent: b.rolls }),
+      el('span', { className: 'hint', textContent: ` of ${cap} rolls developed · ${left} left` })),
+    el('div', { className: 'bar' }, el('div', { style: `width:${cap ? Math.min(100, (b.rolls / cap) * 100) : 0}%` })),
+    exp ? el('div', { className: 'roll-line', textContent: expDays < 0
+      ? `${exp.name} expired ${-expDays} day${expDays === -1 ? '' : 's'} ago`
+      : `Use ${exp.name.toLowerCase()} by ${fmtDate(exp.date)} (${expDays} day${expDays === 1 ? '' : 's'})` }) : null,
+    next ? el('div', { className: 'roll-line', textContent: next }) : null,
+    el('div', { className: 'btn-row' }, go, details));
+}
+
+function selectKit(id) {
+  if (run || !KITS[id]) return;
+  state.kitId = id;
+  save();
+  renderAll();
+}
+
+function renderHome() {
+  const entries = Object.entries(state.batches).filter(([id, b]) => KITS[id] && b && KITS[id].mixes[b.mixKey]);
+  const rank = ([id, b]) => (b.rolls >= KITS[id].mixes[b.mixKey].rolls ? 1 : 0);
+  entries.sort((a, b) => rank(a) - rank(b) || b[1].mixedOn.localeCompare(a[1].mixedOn));
+
+  const items = [el('h2', { className: 'section-title', textContent: 'Your chemistry' })];
+  if (entries.length) {
+    items.push(...entries.map(([id, b]) => chemCard(KITS[id], b)));
+  } else {
+    const mixBtn = el('button', { className: 'btn primary wide', textContent: 'Mix chemistry' });
+    mixBtn.addEventListener('click', () => showTab('mix'));
+    items.push(el('div', { className: 'card' },
+      el('p', { textContent: 'No chemistry mixed yet. Pick your kit at the top, then mix a batch.' }), mixBtn));
+  }
+
+  const recent = sortedLog().slice(0, 3);
+  const all = el('button', { className: 'btn small', textContent: 'All rolls' });
+  all.addEventListener('click', () => showTab('rolls'));
+  items.push(el('h2', { className: 'section-title', textContent: 'Recent rolls' }),
+    el('div', { className: 'card' },
+      recent.length
+        ? el('ul', { className: 'recent' }, ...recent.map((e) => el('li', {},
+          el('b', { textContent: e.film.name }),
+          el('span', { className: 'hint', textContent: ` ${e.format ? `${e.format} · ` : ''}${fmtDate(e.date)} · ${e.kitName}` }))))
+        : el('p', { className: 'hint', textContent: 'No rolls logged yet.' }),
+      el('div', { className: 'btn-row' }, el('span', { className: 'hint', textContent: `${rollLog.length} roll${rollLog.length === 1 ? '' : 's'} in your log` }), all)));
+  $('#tab-home').replaceChildren(...items);
+}
+
 // ---------- Guide ----------
 
 function renderGuide() {
@@ -907,11 +1060,16 @@ function renderAll() {
   renderMix();
   if (!run) syncDevFromBatch();
   renderGuide();
+  if (activeTab === 'home') renderHome();
   if (activeTab === 'batch') renderBatch();
   if (activeTab === 'rolls') renderRolls();
 }
 
+const restored = restoreRun();
+let lastTab = null;
+try { lastTab = sessionStorage.getItem(TAB_KEY); } catch { /* ignore */ }
 renderAll();
+showTab(restored ? 'develop' : document.querySelector(`.tab[data-tab="${lastTab}"]`) ? lastTab : 'home');
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
