@@ -1,7 +1,7 @@
 {
-  "name": "Film Dev Mixer",
-  "short_name": "Film Dev",
-  "description": "Mixing calculator and process timer for the ADOX C-TEC 41 colour film kit.",
+  "name": "DevApp",
+  "short_name": "DevApp",
+  "description": "Film chemistry mixing calculator and process timer.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

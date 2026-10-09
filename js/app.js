@@ -1,7 +1,7 @@
-import { KITS } from './kits.js';
+import { KITS, DEFAULT_KIT } from './kits.js';
 import {
-  rollsPerGroup, canPush, buildProgram, agitationCues, formatDuration,
-  addWeeks, daysUntil, batchExpiry,
+  buildProgram, agitationCues, formatDuration, fmtTemp, fmtTol, fmtVol, mlToFlOz, ML_PER_FL_OZ,
+  mixChecklist, totalWater, addWeeks, daysUntil, batchExpiry,
 } from './logic.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -15,34 +15,85 @@ const el = (tag, props = {}, ...children) => {
 
 const STORE_KEY = 'filmdev.v1';
 const DEFAULT_STATE = {
-  kitId: 'adox-ctec41',
-  batch: null, // { mixMl, mixedOn: 'YYYY-MM-DD', rolls }
-  kitOpenedOn: null,
-  halvesMixed: 0,
-  prefs: { mixMl: 1000, tempC: 30, rotary: false },
+  v: 2,
+  kitId: DEFAULT_KIT,
+  units: 'metric',
+  batches: {}, // kitId -> { mixKey, mixedOn: 'YYYY-MM-DD', rolls }
+  kitMeta: {}, // kitId -> { openedOn, portionUsed }
+  prefs: { mixKey: {}, opts: {}, rotary: false, tankMl: 500, agit: 'kit' },
 };
+
+// v1 only knew the C-TEC kit and kept its batch at the top level.
+function migrate(s) {
+  if (s.v === 2) return s;
+  const out = structuredClone(DEFAULT_STATE);
+  if (s.batch) out.batches.ctec41 = { mixKey: String(s.batch.mixMl), mixedOn: s.batch.mixedOn, rolls: s.batch.rolls };
+  if (s.kitOpenedOn) out.kitMeta.ctec41 = { openedOn: s.kitOpenedOn, portionUsed: (s.halvesMixed ?? 0) / 2 };
+  if (s.prefs?.mixMl) out.prefs.mixKey.ctec41 = String(s.prefs.mixMl);
+  if (s.prefs?.tempC) out.prefs.opts.ctec41 = { temp: String(s.prefs.tempC) };
+  out.prefs.rotary = !!s.prefs?.rotary;
+  return out;
+}
 
 function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY));
-    if (saved) return { ...DEFAULT_STATE, ...saved, prefs: { ...DEFAULT_STATE.prefs, ...saved.prefs } };
+    if (saved) {
+      const s = migrate(saved);
+      return { ...structuredClone(DEFAULT_STATE), ...s, prefs: { ...DEFAULT_STATE.prefs, ...s.prefs } };
+    }
   } catch { /* storage unavailable or corrupt */ }
   return structuredClone(DEFAULT_STATE);
 }
 
 let state = loadState();
+if (!KITS[state.kitId]) state.kitId = DEFAULT_KIT;
 function save() {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch { /* ignore */ }
 }
 
-const kit = KITS[state.kitId];
+const kit = () => KITS[state.kitId];
+const units = () => state.units;
+const T = (t) => fmtTemp(t, units());
+const V = (ml) => fmtVol(ml, units());
 const today = () => new Date().toLocaleDateString('sv'); // YYYY-MM-DD, local time
 const fmtDate = (d) => new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
-const mixSizes = Object.keys(kit.mixes).map(Number);
+const mixKeys = () => Object.keys(kit().mixes);
+const currentMixKey = () => {
+  const k = state.prefs.mixKey[state.kitId];
+  return kit().mixes[k] ? k : mixKeys().at(-1);
+};
+const kitOpts = () => {
+  const saved = state.prefs.opts[state.kitId] ?? {};
+  return Object.fromEntries(kit().options.map((o) => [o.id, o.choices.some((c) => c.value === saved[o.id]) ? saved[o.id] : o.default]));
+};
+const batch = () => state.batches[state.kitId] ?? null;
+const choiceLabel = (l) => (typeof l === 'object' ? T(l) : l);
+
+// ---------- Header: kit + units ----------
+
+$('#kit').append(...Object.values(KITS).map((k) => el('option', { value: k.id, textContent: `${k.name} (${k.process})` })));
+$('#kit').addEventListener('change', () => {
+  if (run) return;
+  state.kitId = $('#kit').value;
+  save();
+  renderAll();
+});
+
+function renderHeader() {
+  $('#kit').value = state.kitId;
+  $('#kit').disabled = !!run;
+  segmented($('#units'), ['metric', 'imperial'], units(), (u) => (u === 'metric' ? '°C · ml' : '°F · oz'), (u) => {
+    state.units = u; save(); renderAll();
+  });
+  $('#kit-banner').hidden = kit().verified || !!run;
+}
 
 // ---------- Tabs ----------
 
+let activeTab = 'mix';
 function showTab(name) {
+  activeTab = name;
   document.querySelectorAll('.tab').forEach((t) => { t.hidden = t.dataset.tab !== name; });
   document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('active', b.dataset.go === name));
   if (name === 'batch') renderBatch();
@@ -51,9 +102,9 @@ function showTab(name) {
 }
 document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.go)));
 
-function segmented(container, values, current, label, onPick) {
+function segmented(container, values, current, label, onPick, sub) {
   container.replaceChildren(...values.map((v) => {
-    const b = el('button', { type: 'button', textContent: label(v) });
+    const b = el('button', { type: 'button' }, el('span', { textContent: label(v) }), sub?.(v) ? el('small', { textContent: sub(v) }) : null);
     b.setAttribute('role', 'radio');
     b.setAttribute('aria-checked', String(v === current));
     b.addEventListener('click', () => onPick(v));
@@ -63,54 +114,60 @@ function segmented(container, values, current, label, onPick) {
 
 // ---------- Mix ----------
 
-function mixStep(text, amount) {
+function mixRow(text, amount) {
   return el('li', {}, el('label', { className: 'check' },
     el('input', { type: 'checkbox' }),
     el('span', { textContent: text }),
-    el('span', { className: 'amt', textContent: `${amount} ml` })));
+    el('span', { className: amount === 'see sheet' ? 'amt muted' : 'amt', textContent: amount })));
 }
 
-function bathCard(name, water, parts) {
-  const final = water + parts.reduce((a, [, v]) => a + v, 0);
-  const start = Math.min(water, Math.round(final * kit.startWaterFraction));
-  const steps = [mixStep(`Water (${kit.mixWaterTempC[0]}–${kit.mixWaterTempC[1]}°C)`, start)];
-  parts.forEach(([part, ml]) => steps.push(mixStep(`Add ${part}, stir`, ml)));
-  if (water > start) steps.push(mixStep(`Top up with water to ${final} ml`, water - start));
+function bathCard(bath) {
+  const rows = mixChecklist(bath).map((i) => {
+    if (i.kind === 'water') {
+      return mixRow(i.temp ? `Water (${T(i.temp)})` : 'Water', i.ml == null ? 'see sheet' : V(i.ml));
+    }
+    if (i.kind === 'part') {
+      const whole = /whole packet/.test(i.name);
+      return mixRow(`Add ${i.name}, stir`, i.ml != null ? V(i.ml) : whole ? '' : 'see sheet');
+    }
+    return mixRow(`Top up with water to ${V(i.final)}`, i.ml != null ? V(i.ml) : '');
+  });
+  const water = totalWater(bath);
   return el('div', { className: 'card' },
-    el('h3', { textContent: name }),
-    el('ol', { className: 'steps' }, ...steps),
-    el('div', { className: 'bath-total' },
-      el('span', { textContent: `Water total: ${water} ml` }),
-      el('span', { textContent: `Working solution: ${final} ml` })));
+    el('h3', { textContent: bath.name }),
+    rows.length ? el('ol', { className: 'steps' }, ...rows) : null,
+    ...(bath.notes ?? []).map((n) => el('p', { className: 'hint', textContent: n })),
+    bath.final != null ? el('div', { className: 'bath-total' },
+      el('span', { textContent: water != null && bath.water ? `Water total: ${V(water)}` : '' }),
+      el('span', { textContent: `Working solution: ${V(bath.final)}` })) : null);
 }
 
 function renderMix() {
-  const ml = state.prefs.mixMl;
-  segmented($('#mix-size'), mixSizes, ml, (v) => `${v} ml`, (v) => {
-    state.prefs.mixMl = v; save(); renderMix();
+  const k = kit();
+  const key = currentMixKey();
+  segmented($('#mix-size'), mixKeys(), key, (v) => k.mixes[v].label, (v) => {
+    state.prefs.mixKey[state.kitId] = v; save(); renderMix();
   });
-  const rolls = kit.mixes[ml].rolls;
-  $('#mix-size-hint').textContent = ml === Math.max(...mixSizes)
-    ? `Uses the whole kit. Develops up to ${rolls} rolls.`
-    : `Uses half of each bottle. Develops up to ${rolls} rolls. The remaining concentrate keeps for ${kit.keeping.remainingAfterPartialMix} weeks.`;
-  $('#mix-baths').replaceChildren(...kit.mixes[ml].baths.map((b) => bathCard(b.name, b.water, b.parts)));
+  $('#mix-size-hint').textContent = k.mixHint?.(key) ?? '';
+  $('#mix-baths').replaceChildren(...k.mixes[key].baths.map(bathCard));
 
-  const rj = kit.remjet;
-  $('#mix-remjet-box').replaceChildren(
-    bathCard(`Remjet Remover (${rj.name}, sold separately)`, rj.water, [[rj.name, rj.concentrate]]),
-    el('p', { className: 'hint', textContent: 'Reusable. Pour it back into its bottle after use. It darkens over time and keeps for several months.' }));
-  $('#mix-remjet-box').hidden = !$('#mix-remjet').checked;
+  $('#mix-extras').replaceChildren(...(k.extras ?? []).map((x) => {
+    const box = el('div', { hidden: true }, bathCard(x.bath));
+    const cb = el('input', { type: 'checkbox' });
+    cb.addEventListener('change', () => { box.hidden = !cb.checked; });
+    return el('div', { className: 'card' }, el('label', { className: 'check' }, cb, x.label), box);
+  }));
 
-  $('#mix-notes').replaceChildren(...kit.mixNotes.map((n) => el('li', { textContent: n })));
+  $('#mix-notes').replaceChildren(...(k.mixNotes ?? []).map((n) => el('li', { textContent: n })));
 }
-$('#mix-remjet').addEventListener('change', () => { $('#mix-remjet-box').hidden = !$('#mix-remjet').checked; });
 
 $('#mix-done').addEventListener('click', () => {
-  const ml = state.prefs.mixMl;
-  if (state.batch && !confirm('Replace the current batch with this new mix? The roll count restarts at 0.')) return;
-  state.batch = { mixMl: ml, mixedOn: today(), rolls: 0 };
-  state.kitOpenedOn ??= today();
-  state.halvesMixed = Math.min(2, state.halvesMixed + ml / 500);
+  const key = currentMixKey();
+  if (batch() && !confirm(`Replace the current ${kit().name} batch with this new mix? The roll count restarts at 0.`)) return;
+  state.batches[state.kitId] = { mixKey: key, mixedOn: today(), rolls: 0 };
+  const meta = (state.kitMeta[state.kitId] ??= { openedOn: null, portionUsed: 0 });
+  meta.openedOn ??= today();
+  meta.portionUsed = Math.min(1, (meta.portionUsed ?? 0) + (kit().mixes[key].portion ?? 1));
   save();
   document.querySelectorAll('#tab-mix .steps input').forEach((i) => { i.checked = false; });
   showTab('batch');
@@ -119,122 +176,149 @@ $('#mix-done').addEventListener('click', () => {
 // ---------- Develop: setup ----------
 
 const dev = {
-  temp: $('#dev-temp'), mix: $('#dev-mix'), first: $('#dev-first'), rolls: $('#dev-rolls'),
-  push: $('#dev-push'), rotary: $('#dev-rotary'), ecn2: $('#dev-ecn2'),
+  mix: $('#dev-mix'), first: $('#dev-first'), rolls: $('#dev-rolls'), agit: $('#dev-agit'),
+  tank: $('#dev-tank'), rotary: $('#dev-rotary'),
 };
-dev.mix.append(...mixSizes.map((v) => el('option', { value: v, textContent: `${v} ml` })));
+const preStepChecks = {};
 
 function syncDevFromBatch() {
-  if (state.batch) {
-    dev.mix.value = state.batch.mixMl;
-    dev.first.value = state.batch.rolls + 1;
-  } else {
-    dev.mix.value = state.prefs.mixMl;
-    dev.first.value ||= 1;
-  }
+  const k = kit();
+  dev.mix.replaceChildren(...mixKeys().map((v) => el('option', { value: v, textContent: k.mixes[v].label })));
+  dev.rolls.replaceChildren(...Array.from({ length: k.maxRollsPerTank }, (_, i) => el('option', { value: i + 1, textContent: i + 1 })));
+  const b = batch();
+  dev.mix.value = b?.mixKey ?? currentMixKey();
+  dev.first.value = b ? b.rolls + 1 : 1;
+  dev.agit.value = state.prefs.agit;
   dev.rotary.checked = state.prefs.rotary;
+  $('#dev-rotary-wrap').hidden = !k.rotary;
+  $('#dev-tank-wrap').hidden = !k.needsTankVolume;
+  $('#dev-tank-label').textContent = `Tank volume (${units() === 'imperial' ? 'fl oz' : 'ml'})`;
+  dev.tank.value = units() === 'imperial' ? +mlToFlOz(state.prefs.tankMl).toFixed(1) : state.prefs.tankMl;
+
+  $('#dev-presteps').replaceChildren(...(k.preSteps ?? []).map((p) => {
+    const cb = (preStepChecks[p.id] = el('input', { type: 'checkbox' }));
+    cb.addEventListener('change', renderProgram);
+    return el('label', { className: 'check' }, cb, p.label);
+  }));
+  $('#dev-toggles').hidden = !k.rotary && !(k.preSteps ?? []).length;
   renderProgram();
 }
 
 function devOptions() {
   return {
-    tempC: state.prefs.tempC,
-    mixMl: Number(dev.mix.value),
+    ...kitOpts(),
+    mixKey: dev.mix.value,
     firstRoll: Number(dev.first.value),
     rolls: Number(dev.rolls.value),
-    pushStops: Number(dev.push.value),
+    tankMl: state.prefs.tankMl,
   };
 }
 
-function renderProgram() {
-  segmented(dev.temp, kit.temperatures, state.prefs.tempC, (v) => `${v}°C`, (v) => {
-    state.prefs.tempC = v; save(); renderProgram();
-  });
-  const pushable = canPush(kit, state.prefs.tempC);
-  if (!pushable) dev.push.value = '0';
-  dev.push.disabled = !pushable;
+function renderOptions() {
+  const k = kit();
+  const opts = kitOpts();
+  $('#dev-options').replaceChildren(...k.options.filter((o) => !o.when || o.when(opts)).map((o) => {
+    const seg = el('div', { className: 'seg' });
+    seg.setAttribute('role', 'radiogroup');
+    const byVal = Object.fromEntries(o.choices.map((c) => [c.value, c]));
+    segmented(seg, o.choices.map((c) => c.value), opts[o.id], (v) => choiceLabel(byVal[v].label), (v) => {
+      (state.prefs.opts[state.kitId] ??= {})[o.id] = v;
+      save();
+      renderProgram();
+    }, (v) => byVal[v].sub);
+    return el('div', { className: 'card' }, el('h2', { textContent: o.label }), seg);
+  }));
+}
 
+// The agitation to use for a step, after the user's reminder setting.
+function effectiveAgitation(step) {
+  if (step.manual || /wash|rinse|preheat|presoak/.test(step.id)) return null;
+  if (kit().rotary && state.prefs.rotary) return { continuous: true, label: 'Rotate continuously' };
+  const a = state.prefs.agit;
+  if (a === 'off') return null;
+  if (a === 'kit') return step.agitation ?? null;
+  return { initial: 0, every: Number(a), cue: 'Agitate' };
+}
+
+function stepSub(s) {
+  return [T(s.temp), fmtTol(s.tol, units())].filter(Boolean).join(' ');
+}
+
+function noteText(n) {
+  if (typeof n === 'string') return n;
+  if (n.d9) return `D9 for your tank (${n.label}): ${V(n.stock)} stock + ${V(n.water)} water. One-shot: discard after use.`;
+  return '';
+}
+
+function currentProgram() {
   const opts = devOptions();
-  const prog = buildProgram(kit, opts);
+  const prog = buildProgram(kit(), opts);
+  if (prog.error) return prog;
+  const pre = (kit().preSteps ?? []).filter((p) => preStepChecks[p.id]?.checked).map((p) => p.step);
+  return { ...prog, steps: [...pre, ...prog.steps], opts };
+}
+
+function renderProgram() {
+  renderOptions();
+  const prog = currentProgram();
   const err = $('#dev-error');
   err.hidden = !prog.error;
   err.textContent = prog.error ?? '';
   $('#dev-start').disabled = !!prog.error;
 
-  const items = [];
-  if (dev.ecn2.checked) {
-    items.push(el('li', {}, el('span', {}, 'Remjet removal', el('span', { className: 'sub', textContent: 'Soak 10 s, wash 30 s, repeat 3–4×' })), el('span', { className: 't', textContent: 'manual' })));
-  }
-  for (const s of prog.steps ?? []) {
-    items.push(el('li', { className: s.critical ? 'crit' : '' },
-      el('span', {}, s.name, el('span', { className: 'sub', textContent: [s.temp, s.tol].filter(Boolean).join(' ') })),
-      el('span', { className: 't', textContent: formatDuration(s.sec) })));
-  }
-  $('#dev-program').replaceChildren(...items);
-
-  const notes = [];
-  if (prog.times) {
-    const per = rollsPerGroup(kit, opts.mixMl);
-    const from = prog.times.group * per + 1;
-    notes.push(`Times for roll${per > 1 ? 's' : ''} ${from}–${from + per - 1} of a ${opts.mixMl} ml mix.`);
-    if (prog.times.pushSec) notes.push(`Developer includes +${prog.times.pushSec} s for the push.`);
-    notes.push(...prog.times.notes);
-  }
-  if (!pushable) notes.push(`Push times are only given for ${Object.keys(kit.pushPerStopSec).join('/')}°C.`);
-  $('#dev-notes').replaceChildren(...notes.map((n) => el('li', { textContent: n })));
+  $('#dev-program').replaceChildren(...(prog.steps ?? []).map((s) => el('li', { className: s.critical ? 'crit' : '' },
+    el('span', {}, s.name,
+      s.unverified ? el('span', { className: 'badge', textContent: 'check sheet' }) : null,
+      el('span', { className: 'sub', textContent: s.manual ? 'Manual step' : stepSub(s) })),
+    el('span', { className: 't', textContent: s.manual ? '—' : formatDuration(s.sec) }))));
+  $('#dev-notes').replaceChildren(...(prog.notes ?? []).map((n) => el('li', { textContent: noteText(n) })));
 }
 
-for (const k of ['mix', 'first', 'rolls', 'push', 'ecn2']) dev[k].addEventListener('input', renderProgram);
-dev.rotary.addEventListener('change', () => { state.prefs.rotary = dev.rotary.checked; save(); });
+dev.mix.addEventListener('input', renderProgram);
+dev.first.addEventListener('input', renderProgram);
+dev.rolls.addEventListener('input', renderProgram);
+dev.agit.addEventListener('change', () => { state.prefs.agit = dev.agit.value; save(); renderProgram(); });
+dev.rotary.addEventListener('change', () => { state.prefs.rotary = dev.rotary.checked; save(); renderProgram(); });
+dev.tank.addEventListener('input', () => {
+  const v = Number(dev.tank.value);
+  if (v > 0) {
+    state.prefs.tankMl = Math.round(units() === 'imperial' ? v * ML_PER_FL_OZ : v);
+    save();
+    renderProgram();
+  }
+});
 
 // ---------- Develop: running ----------
 
 let run = null;
 
-const PREP = {
-  preheat: 'Fill the tank with warm water from the bath. Coloured water when you empty it is normal.',
-  develop: 'Pour in the developer, tap the tank twice to dislodge bubbles, then agitate.',
-  wash1: 'Fill with warm water.',
-  bleachFix: 'Pour in the bleach fix, tap the tank twice to dislodge bubbles, then agitate.',
-  wash2: 'Wash in running or changed water.',
-  stab: 'Pour in the stabilizer.',
-};
-
 $('#dev-start').addEventListener('click', () => {
-  const opts = devOptions();
-  const prog = buildProgram(kit, opts);
+  const prog = currentProgram();
   if (prog.error) return;
-  const steps = [...prog.steps];
-  if (dev.ecn2.checked) {
-    const rj = kit.remjet;
-    steps.unshift({
-      id: 'rjr', name: 'Remjet removal', manual: true, temp: `${opts.tempC}°C recommended`,
-      text: `Fill with ${rj.name} at process temperature and agitate gently for about 10 s. Pour it back into its bottle, then wash with warm water for about 30 s. Repeat 3–4 times until the water runs clear with no black smudge.`,
-    });
-  }
-  run = { opts, steps, idx: 0, rotary: dev.rotary.checked };
+  run = { opts: prog.opts, steps: prog.steps, idx: 0 };
   unlockAudio();
   $('#dev-setup').hidden = true;
   $('#dev-run').hidden = false;
+  renderHeader();
   enterStep();
   keepAwake(true);
 });
 
 function enterStep() {
   const s = run.steps[run.idx];
-  Object.assign(run, { phase: 'ready', remaining: s.sec, endAt: 0, lastCue: -1, warned: false });
+  Object.assign(run, { phase: 'ready', remaining: s.sec, endAt: 0, lastCue: -1, midShown: false, warned: false, agit: effectiveAgitation(s) });
   $('#run-stepno').textContent = `Step ${run.idx + 1} of ${run.steps.length}`;
   $('#run-name').textContent = s.name;
-  $('#run-temp').textContent = [s.temp, s.tol].filter(Boolean).join(' · ');
+  $('#run-temp').textContent = s.manual ? '' : [T(s.temp), fmtTol(s.tol, units())].filter(Boolean).join(' · ');
   $('#run-clock').hidden = !!s.manual;
   $('#run-clock').classList.remove('warn');
   $('#run-clock').textContent = formatDuration(s.sec ?? 0);
-  setCue(s.manual ? s.text : PREP[s.id] ?? '', false);
+  setCue(s.manual ? s.text : s.prep ?? '', false);
   $('#run-go').textContent = s.manual ? 'Done' : 'Start step';
   $('#run-go').hidden = false;
   $('#run-pause').hidden = true;
   const next = run.steps[run.idx + 1];
-  $('#run-next').textContent = next ? `Next: ${next.name}${next.sec ? ` (${formatDuration(next.sec)})` : ''}` : 'Last step';
+  $('#run-next').textContent = next ? `Next: ${next.name}${next.manual ? '' : ` (${formatDuration(next.sec)})`}` : 'Last step';
 }
 
 function setCue(text, flash = true) {
@@ -244,14 +328,19 @@ function setCue(text, flash = true) {
 }
 
 function startTimer() {
+  const resuming = run.phase === 'paused';
   run.phase = 'running';
   run.endAt = Date.now() + run.remaining * 1000;
   $('#run-go').hidden = true;
   $('#run-pause').hidden = false;
   $('#run-pause').textContent = 'Pause';
-  const s = run.steps[run.idx];
-  if (s.agitate) setCue(run.rotary ? 'Rotate continuously' : 'Agitate continuously');
-  beep(660, 120);
+  if (!resuming) {
+    const a = run.agit;
+    if (a?.continuous) setCue(a.label?.startsWith('Rotate') ? 'Rotate continuously' : 'Agitate continuously');
+    else if (a?.initial) setCue(`Agitate continuously for ${a.initial} s`);
+    else if (a) setCue(`${a.cue ?? 'Agitate'} now, then at each beep`);
+    beep(660, 120);
+  }
   tick();
 }
 
@@ -264,17 +353,18 @@ function tick() {
   clock.textContent = formatDuration(run.remaining);
   clock.classList.toggle('warn', run.remaining <= 10);
 
-  if (s.agitate && !run.rotary) {
-    const cues = agitationCues(s.sec);
+  const a = run.agit;
+  const cues = agitationCues(s.sec, a);
+  if (cues.length) {
     let due = -1;
     cues.forEach((t, i) => { if (t <= elapsed) due = i; });
     if (due > run.lastCue && run.remaining > 10) {
       run.lastCue = due;
-      setCue('Tilt once, then back in the bath');
+      setCue(a.cue ?? 'Agitate');
       beep(880, 120); vibrate(150);
-    } else if (run.lastCue === -1 && elapsed >= 30 && elapsed < 45) {
-      run.lastCue = -0.5; // shown once between the continuous phase and the first tilt
-      setCue('Back in the bath. Tilt once every 15 s');
+    } else if (!run.midShown && a.initial && elapsed >= a.initial && due === -1) {
+      run.midShown = true;
+      setCue('Stop. Wait for the next beep');
     }
   }
   if (!run.warned && run.remaining <= 10 && s.sec > 20) {
@@ -283,7 +373,7 @@ function tick() {
     beep(880, 100, 2); vibrate([100, 80, 100]);
   }
   if (run.remaining <= 0) return finishStep();
-  run.raf = setTimeout(tick, 200);
+  run.timer = setTimeout(tick, 200);
 }
 
 function finishStep() {
@@ -297,7 +387,7 @@ function finishStep() {
 }
 
 function advance() {
-  clearTimeout(run.raf);
+  clearTimeout(run.timer);
   if (run.idx === run.steps.length - 1) return finishRun();
   run.idx += 1;
   enterStep();
@@ -311,7 +401,7 @@ $('#run-go').addEventListener('click', () => {
 
 $('#run-pause').addEventListener('click', () => {
   if (run.phase === 'running') {
-    clearTimeout(run.raf);
+    clearTimeout(run.timer);
     run.remaining = Math.max(0, (run.endAt - Date.now()) / 1000);
     run.phase = 'paused';
     $('#run-pause').textContent = 'Resume';
@@ -333,27 +423,28 @@ $('#run-abort').addEventListener('click', () => {
 function finishRun() {
   $('#dev-run').hidden = true;
   $('#dev-done').hidden = false;
-  const { firstRoll, rolls, mixMl } = run.opts;
+  const { firstRoll, rolls, mixKey } = run.opts;
   const total = firstRoll - 1 + rolls;
-  $('#done-log').textContent = `Log ${rolls} roll${rolls > 1 ? 's' : ''} (${total} of ${kit.mixes[mixMl].rolls} used)`;
+  $('#done-log').textContent = `Log ${rolls} roll${rolls > 1 ? 's' : ''} (${total} of ${kit().mixes[mixKey].rolls} used)`;
   keepAwake(false);
 }
 
 function endRun() {
-  if (run) clearTimeout(run.raf);
+  if (run) clearTimeout(run.timer);
   run = null;
   keepAwake(false);
   $('#dev-run').hidden = true;
   $('#dev-done').hidden = true;
   $('#dev-setup').hidden = false;
+  renderHeader();
   syncDevFromBatch();
 }
 
 $('#done-log').addEventListener('click', () => {
-  const { firstRoll, rolls, mixMl } = run.opts;
-  state.batch ??= { mixMl, mixedOn: today(), rolls: 0 };
-  state.batch.mixMl = mixMl;
-  state.batch.rolls = firstRoll - 1 + rolls;
+  const { firstRoll, rolls, mixKey } = run.opts;
+  const b = (state.batches[state.kitId] ??= { mixKey, mixedOn: today(), rolls: 0 });
+  b.mixKey = mixKey;
+  b.rolls = firstRoll - 1 + rolls;
   save();
   endRun();
   showTab('batch');
@@ -363,7 +454,7 @@ $('#done-back').addEventListener('click', endRun);
 // Timers are throttled in the background; catch up immediately on return.
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
-    if (run?.phase === 'running') { clearTimeout(run.raf); tick(); }
+    if (run?.phase === 'running') { clearTimeout(run.timer); tick(); }
     if (run) keepAwake(true);
   }
 });
@@ -416,71 +507,75 @@ async function keepAwake(on) {
 
 // ---------- Batch ----------
 
-const BATH_NAMES = { cd: 'Color developer', bx: 'Bleach fix', stab: 'Stabilizer' };
-
-function useByRow(label, date) {
+function useByRow(label, date, note) {
   const days = daysUntil(date);
   return el('tr', {},
-    el('td', { textContent: label }),
+    el('td', {}, label, note ? el('span', { className: 'sub', textContent: note }) : null),
     el('td', { textContent: fmtDate(date) }),
     el('td', { className: days < 0 ? 'bad' : 'ok', textContent: days < 0 ? 'expired' : `${days} d left` }));
 }
 
 function renderBatch() {
+  const k = kit();
   const cur = $('#batch-current');
-  const b = state.batch;
-  if (!b) {
-    cur.replaceChildren(el('h2', { textContent: 'Current batch' }),
+  const b = batch();
+  if (!b || !k.mixes[b.mixKey]) {
+    cur.replaceChildren(el('h2', { textContent: `${k.name}: current batch` }),
       el('p', { className: 'hint', textContent: 'No batch logged yet. Mix one on the Mix tab and tap "I\'ve mixed this".' }));
   } else {
-    const cap = kit.mixes[b.mixMl].rolls;
-    const exp = batchExpiry(kit, b.mixedOn);
+    const cap = k.mixes[b.mixKey].rolls;
+    const exp = batchExpiry(k, b.mixedOn);
     cur.replaceChildren(
-      el('h2', { textContent: `Current batch: ${b.mixMl} ml, mixed ${fmtDate(b.mixedOn)}` }),
+      el('h2', { textContent: `${k.name}: ${k.mixes[b.mixKey].label}, mixed ${fmtDate(b.mixedOn)}` }),
       el('div', { className: 'big-num', textContent: `${b.rolls} / ${cap}` }),
       el('div', { className: 'hint', textContent: b.rolls >= cap ? 'Capacity reached. Mix a new batch.' : `rolls developed. Next is roll ${b.rolls + 1}.` }),
       el('div', { className: 'bar' }, el('div', { style: `width:${Math.min(100, (b.rolls / cap) * 100)}%` })),
-      el('table', { className: 'tbl' },
-        el('tr', {}, el('th', { textContent: 'Working solution' }), el('th', { textContent: 'Use by' }), el('th')),
-        ...Object.entries(exp).map(([k, d]) => useByRow(BATH_NAMES[k], d))));
+      exp.length
+        ? el('table', { className: 'tbl' },
+          el('tr', {}, el('th', { textContent: 'Working solution' }), el('th', { textContent: 'Use by' }), el('th')),
+          ...exp.map((e) => useByRow(e.name, e.date, e.note)))
+        : el('p', { className: 'hint', textContent: 'See your sheet for how long the mixed chemistry keeps.' }));
   }
 
-  const kc = $('#batch-kit');
+  const meta = state.kitMeta[state.kitId] ?? {};
   const rows = [];
-  if (state.kitOpenedOn && state.halvesMixed === 1) {
-    rows.push(useByRow('Remaining concentrate', addWeeks(state.kitOpenedOn, kit.keeping.remainingAfterPartialMix)));
+  const leftover = k.keeping?.leftoverConcentrateWeeks;
+  if (leftover && meta.openedOn && meta.portionUsed > 0 && meta.portionUsed < 1) {
+    rows.push(useByRow('Remaining concentrate', addWeeks(meta.openedOn, leftover)));
   }
-  kc.replaceChildren(
+  const status = !meta.openedOn ? 'Not opened yet.'
+    : `Opened ${fmtDate(meta.openedOn)}. ${meta.portionUsed >= 1 ? 'All concentrate used.' : meta.portionUsed > 0 ? `${Math.round((1 - meta.portionUsed) * 100)}% of the concentrate is left.` : ''}`;
+  $('#batch-kit').replaceChildren(
     el('h2', { textContent: 'Kit' }),
-    el('p', { className: 'hint', textContent: !state.kitOpenedOn ? 'Not opened yet.'
-      : `Opened ${fmtDate(state.kitOpenedOn)}. ${state.halvesMixed >= 2 ? 'All concentrate used.' : state.halvesMixed === 1 ? 'Half the concentrate is left (one more 500 ml mix).' : ''}` }),
+    el('p', { className: 'hint', textContent: status }),
     rows.length ? el('table', { className: 'tbl' }, ...rows) : null);
 
   const bm = $('#batch-mix');
-  if (!bm.options.length) bm.append(...mixSizes.map((v) => el('option', { value: v, textContent: `${v} ml` })));
-  bm.value = b?.mixMl ?? state.prefs.mixMl;
+  bm.replaceChildren(...mixKeys().map((v) => el('option', { value: v, textContent: k.mixes[v].label })));
+  bm.value = b?.mixKey ?? currentMixKey();
   $('#batch-date').value = b?.mixedOn ?? '';
   $('#batch-rolls').value = b?.rolls ?? 0;
-  $('#batch-opened').value = state.kitOpenedOn ?? '';
+  $('#batch-opened').value = meta.openedOn ?? '';
 }
 
 $('#batch-save').addEventListener('click', () => {
   const mixedOn = $('#batch-date').value;
   if (mixedOn) {
-    state.batch = {
-      mixMl: Number($('#batch-mix').value),
+    state.batches[state.kitId] = {
+      mixKey: $('#batch-mix').value,
       mixedOn,
       rolls: Math.max(0, Math.floor(Number($('#batch-rolls').value) || 0)),
     };
   }
-  state.kitOpenedOn = $('#batch-opened').value || null;
+  (state.kitMeta[state.kitId] ??= { portionUsed: 0 }).openedOn = $('#batch-opened').value || null;
   save();
   renderBatch();
 });
 
 $('#batch-reset').addEventListener('click', () => {
-  if (!confirm('Clear the batch, kit dates and roll count?')) return;
-  state = { ...structuredClone(DEFAULT_STATE), prefs: state.prefs };
+  if (!confirm(`Clear the ${kit().name} batch, kit dates and roll count?`)) return;
+  delete state.batches[state.kitId];
+  delete state.kitMeta[state.kitId];
   save();
   renderBatch();
 });
@@ -488,36 +583,45 @@ $('#batch-reset').addEventListener('click', () => {
 // ---------- Guide ----------
 
 function renderGuide() {
-  const rj = kit.remjet;
-  $('#guide-ecn2').replaceChildren(...[
-    `Mix ${rj.concentrate} ml ${rj.name} with ${rj.water} ml water to make ${rj.final} ml. Heat it to your process temperature (38°C recommended).`,
-    'Fill the tank and agitate gently for about 10 s.',
-    'Pour the remover back into its bottle and wash with warm water for about 30 s.',
-    'Repeat 3–4 times until the water comes out clear with no black smudge.',
-    'Then develop as normal C-41. The remover keeps for several months and can be reused.',
-  ].map((t) => el('li', { textContent: t })));
+  const k = kit();
+  $('#guide-process').replaceChildren(...(k.agitationGuide ?? []).map((t) => el('li', { textContent: t })));
 
-  const k = kit.keeping;
-  $('#guide-keeping').replaceChildren(
-    el('tr', {}, el('th'), el('th', { textContent: 'Mixed' }), el('th', { textContent: 'Opened conc.' })),
-    ...Object.keys(k.mixed).map((b) => el('tr', {},
-      el('td', { textContent: BATH_NAMES[b] }),
-      el('td', { textContent: `${k.mixed[b]} weeks` }),
-      el('td', { textContent: `${k.openedConcentrate[b]} weeks` }))));
+  const ecn2 = (k.preSteps ?? []).find((p) => p.id === 'ecn2');
+  $('#guide-ecn2-card').hidden = !ecn2;
+  if (ecn2) $('#guide-ecn2').textContent = `${ecn2.step.text} Then develop as normal C-41.`;
 
-  $('#guide-trouble').replaceChildren(...kit.troubleshooting.map(([sym, cause, fix]) =>
-    el('div', { className: 'trouble' }, el('b', { textContent: sym }),
-      el('span', { textContent: `Cause: ${cause}` }), el('span', { textContent: `Fix: ${fix}` }))));
+  const kt = k.keeping?.table;
+  $('#guide-keeping-card').hidden = !kt;
+  if (kt) {
+    $('#guide-keeping').replaceChildren(
+      el('tr', {}, el('th'), el('th', { textContent: 'Mixed' }), el('th', { textContent: 'Opened conc.' })),
+      ...kt.map((row) => el('tr', {}, ...row.map((c) => el('td', { textContent: c })))));
+  }
 
-  $('#guide-source').textContent = `Data from the ${kit.source}. Always double-check against the sheet that came with your kit.`;
+  const tr = k.troubleshooting;
+  $('#guide-trouble-card').hidden = !tr;
+  if (tr) {
+    $('#guide-trouble').replaceChildren(...tr.map(([sym, cause, fix]) =>
+      el('div', { className: 'trouble' }, el('b', { textContent: sym }),
+        el('span', { textContent: `Cause: ${cause}` }), el('span', { textContent: `Fix: ${fix}` }))));
+  }
+
+  $('#guide-source').textContent = k.verified
+    ? `Checked against the ${k.source}. Always follow the sheet that came with your kit.`
+    : `Compiled from the ${k.source}. Not checked against the printed sheet. Always follow the sheet that came with your kit.`;
 }
 
 // ---------- Boot ----------
 
-$('#kit-name').textContent = kit.name;
-renderMix();
-syncDevFromBatch();
-renderGuide();
+function renderAll() {
+  renderHeader();
+  renderMix();
+  if (!run) syncDevFromBatch();
+  renderGuide();
+  if (activeTab === 'batch') renderBatch();
+}
+
+renderAll();
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});

@@ -26,14 +26,14 @@ html, body {
 body { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
 
 .top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  padding: calc(12px + env(safe-area-inset-top)) 16px 8px;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: calc(12px + env(safe-area-inset-top)) 16px 4px;
 }
-.top h1 { font-size: 20px; margin: 0; }
-.kit-name { color: var(--accent); font-size: 14px; font-weight: 600; }
+.top-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.top h1 { font-size: 22px; margin: 0; color: var(--accent); }
+.kit-pick { margin-top: 10px; }
+.kit-pick select { font-weight: 600; }
 
 main { max-width: 640px; margin: 0 auto; padding: 0 16px; }
 
@@ -46,6 +46,19 @@ main { max-width: 640px; margin: 0 auto; padding: 0 16px; }
 .card h2 { font-size: 17px; margin: 0 0 10px; }
 .card h3 { font-size: 15px; margin: 0 0 8px; color: var(--accent); }
 
+.badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #4a3410;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+.warn-card { border: 1px solid #6b4a14; font-size: 14px; color: var(--muted); }
+.warn-card b { display: block; color: var(--accent); margin-bottom: 4px; }
 .hint { color: var(--muted); font-size: 14px; margin: 8px 0 0; }
 .center { text-align: center; }
 .error { color: var(--danger); margin-bottom: 10px; }
@@ -61,6 +74,8 @@ main { max-width: 640px; margin: 0 auto; padding: 0 16px; }
   font: inherit;
   font-weight: 600;
 }
+.seg button small { display: block; font-size: 12px; font-weight: 500; opacity: .8; }
+.seg.small button { padding: 6px 10px; font-size: 13px; flex: none; }
 .seg button[aria-checked="true"] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -104,6 +119,7 @@ label.check input { width: 22px; height: 22px; margin: 0; accent-color: var(--ac
 .steps li { border-top: 1px solid var(--line); }
 .steps li:first-child { border-top: 0; }
 .steps label.check { padding: 10px 0; }
+.steps .amt.muted { color: var(--muted); font-weight: 500; font-style: italic; }
 .steps .amt { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .steps input:checked ~ span { color: var(--muted); text-decoration: line-through; }
 .bath-total { display: flex; justify-content: space-between; color: var(--muted); font-size: 14px; margin-top: 6px; }
@@ -144,6 +160,7 @@ label.check input { width: 22px; height: 22px; margin: 0; accent-color: var(--ac
 .tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 .tbl th, .tbl td { text-align: left; padding: 7px 4px; border-top: 1px solid var(--line); vertical-align: top; }
 .tbl th { color: var(--muted); font-weight: 600; border-top: 0; }
+.tbl .sub { display: block; color: var(--muted); font-size: 12px; }
 .ok { color: var(--ok); }
 .bad { color: var(--danger); }
 .trouble { border-top: 1px solid var(--line); padding: 10px 0; }

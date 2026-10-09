@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Film Dev Mixer</title>
-  <meta name="description" content="Mixing calculator and process timer for the ADOX C-TEC 41 colour film kit.">
+  <title>DevApp</title>
+  <meta name="description" content="Film chemistry mixing calculator and process timer.">
   <meta name="theme-color" content="#121212">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Film Dev">
+  <meta name="apple-mobile-web-app-title" content="DevApp">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -17,11 +17,22 @@
 </head>
 <body>
   <header class="top">
-    <h1>Film Dev Mixer</h1>
-    <span class="kit-name" id="kit-name"></span>
+    <div class="top-row">
+      <h1>DevApp</h1>
+      <div class="seg small" id="units" role="radiogroup" aria-label="Units"></div>
+    </div>
+    <label class="kit-pick">Chemistry
+      <select id="kit"></select>
+    </label>
   </header>
 
   <main>
+    <div class="card warn-card" id="kit-banner" hidden>
+      <b>Check against your kit's sheet.</b>
+      These instructions were compiled from published copies, reviews and retailer listings, not from the printed sheet.
+      Steps marked <span class="badge">check sheet</span> are the least certain.
+    </div>
+
     <!-- MIX -->
     <section id="tab-mix" class="tab" data-tab="mix">
       <div class="card">
@@ -30,42 +41,44 @@
         <p class="hint" id="mix-size-hint"></p>
       </div>
       <div id="mix-baths"></div>
-      <div class="card">
-        <label class="check"><input type="checkbox" id="mix-remjet"> I'm also developing ECN-2 (motion picture) film</label>
-        <div id="mix-remjet-box" hidden></div>
-      </div>
+      <div id="mix-extras"></div>
       <div class="card">
         <h2>Notes</h2>
         <ul id="mix-notes" class="notes"></ul>
-        <button class="btn primary wide" id="mix-done">I've mixed this — start a new batch</button>
+        <button class="btn primary wide" id="mix-done">I've mixed this. Start a new batch</button>
       </div>
     </section>
 
     <!-- DEVELOP -->
     <section id="tab-develop" class="tab" data-tab="develop" hidden>
       <div id="dev-setup">
-        <div class="card">
-          <h2>Process temperature</h2>
-          <div class="seg" id="dev-temp" role="radiogroup" aria-label="Temperature"></div>
-          <p class="hint">Keep the water bath within ±1°C during development.</p>
-        </div>
+        <div id="dev-options"></div>
         <div class="card grid2">
-          <label>Mix size
+          <label>Mix
             <select id="dev-mix"></select>
           </label>
           <label>First roll # in this chemistry
             <input type="number" id="dev-first" min="1" inputmode="numeric">
           </label>
           <label>Rolls in the tank
-            <select id="dev-rolls"><option value="1">1</option><option value="2">2</option></select>
+            <select id="dev-rolls"></select>
           </label>
-          <label>Push (stops)
-            <select id="dev-push"><option value="0">None</option><option value="1">+1</option><option value="2">+2</option><option value="3">+3</option></select>
+          <label>Agitation reminder
+            <select id="dev-agit">
+              <option value="kit">Kit default</option>
+              <option value="15">Every 15 s</option>
+              <option value="30">Every 30 s</option>
+              <option value="60">Every 60 s</option>
+              <option value="off">Off</option>
+            </select>
+          </label>
+          <label id="dev-tank-wrap" hidden><span id="dev-tank-label">Tank volume</span>
+            <input type="number" id="dev-tank" min="1" step="any" inputmode="decimal">
           </label>
         </div>
-        <div class="card">
-          <label class="check"><input type="checkbox" id="dev-rotary"> Rotary processor (continuous rotation)</label>
-          <label class="check"><input type="checkbox" id="dev-ecn2"> ECN-2 film: remove remjet first</label>
+        <div class="card" id="dev-toggles">
+          <label class="check" id="dev-rotary-wrap"><input type="checkbox" id="dev-rotary"> Rotary processor (continuous rotation)</label>
+          <div id="dev-presteps"></div>
         </div>
         <div class="card">
           <h2>Program</h2>
@@ -108,39 +121,31 @@
       <div class="card">
         <h2>Edit batch</h2>
         <div class="grid2">
-          <label>Mix size <select id="batch-mix"></select></label>
+          <label>Mix <select id="batch-mix"></select></label>
           <label>Mixed on <input type="date" id="batch-date"></label>
           <label>Rolls developed <input type="number" id="batch-rolls" min="0" inputmode="numeric"></label>
           <label>Kit opened on <input type="date" id="batch-opened"></label>
         </div>
         <button class="btn wide" id="batch-save">Save</button>
-        <button class="btn ghost wide danger" id="batch-reset">Clear everything</button>
+        <button class="btn ghost wide danger" id="batch-reset">Clear this kit's batch</button>
       </div>
     </section>
 
     <!-- GUIDE -->
     <section id="tab-guide" class="tab" data-tab="guide" hidden>
       <div class="card">
-        <h2>Agitation</h2>
-        <ol class="notes">
-          <li>Develop at most two rolls per tank.</li>
-          <li>Fill the tank with water from the bath first to preheat it. Coloured water coming out is normal (anti-halation layer).</li>
-          <li>After filling with developer or bleach fix, tap the tank on the table twice to dislodge air bubbles.</li>
-          <li>Agitate continuously for the first 30 s, then gently tilt once every 15 s. Put the tank back in the water bath after each agitation.</li>
-          <li>Or rotate continuously in a rotary processor.</li>
-          <li>All step times include 10 s for filling and emptying the tank. Start the timer as you begin pouring.</li>
-          <li>Development time is critical. Wash, bleach fix and stabilizer times are minimums and may be extended by up to 50%.</li>
-        </ol>
+        <h2>Processing notes</h2>
+        <ul class="notes" id="guide-process"></ul>
       </div>
-      <div class="card">
+      <div class="card" id="guide-ecn2-card" hidden>
         <h2>ECN-2 film (remjet removal)</h2>
-        <ol class="notes" id="guide-ecn2"></ol>
+        <p id="guide-ecn2"></p>
       </div>
-      <div class="card">
+      <div class="card" id="guide-keeping-card" hidden>
         <h2>Keeping</h2>
         <table class="tbl" id="guide-keeping"></table>
       </div>
-      <div class="card">
+      <div class="card" id="guide-trouble-card" hidden>
         <h2>Troubleshooting</h2>
         <div id="guide-trouble"></div>
       </div>
@@ -149,7 +154,7 @@
         <ul class="notes">
           <li>Avoid skin and eye contact. Don't swallow the chemicals.</li>
           <li>Keep away from children and food. Label every bottle clearly, and don't use bottles normally used for food or drink.</li>
-          <li>Don't pour photochemicals down the drain. Take them to a municipal hazardous-waste collection point.</li>
+          <li>Don't pour photochemicals down the drain. Take them to a hazardous-waste collection point.</li>
         </ul>
       </div>
       <p class="hint center" id="guide-source"></p>

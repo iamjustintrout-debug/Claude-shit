@@ -1,80 +1,43 @@
 // Pure functions: no DOM, no storage. Covered by tests/logic.test.js.
 
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+export const ML_PER_FL_OZ = 29.5735;
 
-// Rolls covered by each column of the time tables (2 for 500 ml, 4 for 1000 ml).
-export function rollsPerGroup(kit, mixMl) {
-  const mix = kit.mixes[mixMl];
-  if (!mix) throw new Error(`Unknown mix size: ${mixMl}`);
-  return mix.rolls / kit.times[kit.temperatures[0]].develop.length;
+// ---------- Units ----------
+
+// Temperatures are stored as { c, f } (both as printed by the manufacturer),
+// ranges as { c: [lo, hi], f: [lo, hi] }, or a plain string like 'room temp'.
+export function fmtTemp(t, units) {
+  if (t == null) return '';
+  if (typeof t === 'string') return t;
+  const v = units === 'imperial' ? t.f : t.c;
+  const u = units === 'imperial' ? '°F' : '°C';
+  return Array.isArray(v) ? `${v[0]}–${v[1]}${u}` : `${v}${u}`;
 }
 
-// Which table column applies to a run whose first roll is `firstRoll`
-// (1-based count of rolls through this batch of chemistry). Null once
-// the mix's capacity is used up.
-export function rollGroup(kit, mixMl, firstRoll) {
-  if (!Number.isInteger(firstRoll) || firstRoll < 1) return null;
-  if (firstRoll > kit.mixes[mixMl].rolls) return null;
-  return Math.floor((firstRoll - 1) / rollsPerGroup(kit, mixMl));
+export function fmtTol(tol, units) {
+  if (!tol) return '';
+  return `±${units === 'imperial' ? tol.f : tol.c}°${units === 'imperial' ? 'F' : 'C'}`;
 }
 
-export function canPush(kit, tempC) {
-  return kit.pushPerStopSec[tempC] != null;
+export function mlToFlOz(ml) {
+  return ml / ML_PER_FL_OZ;
 }
 
-// Develop and bleach-fix times for one run, or { error } if the datasheet
-// doesn't cover it.
-export function runTimes(kit, { tempC, mixMl, firstRoll, rolls = 1, pushStops = 0 }) {
-  const table = kit.times[tempC];
-  if (!table) return { error: `No times for ${tempC}°C in the datasheet.` };
-  if (!kit.mixes[mixMl]) return { error: `Unknown mix size: ${mixMl} ml.` };
-  if (rolls < 1 || rolls > kit.maxRollsPerTank) {
-    return { error: `Develop at most ${kit.maxRollsPerTank} rolls at a time.` };
+function oneVol(ml, units) {
+  if (units !== 'imperial') return `${Math.round(ml)} ml`;
+  const oz = mlToFlOz(ml);
+  return `${oz >= 10 ? oz.toFixed(1).replace(/\.0$/, '') : oz.toFixed(1)} fl oz`;
+}
+
+// ml may be a number or a [lo, hi] range.
+export function fmtVol(ml, units) {
+  if (ml == null) return '';
+  if (Array.isArray(ml)) {
+    const [a, b] = ml.map((v) => oneVol(v, units));
+    return `${a.split(' ')[0]}–${b}`;
   }
-  const capacity = kit.mixes[mixMl].rolls;
-  const lastRoll = firstRoll + rolls - 1;
-  if (lastRoll > capacity) {
-    return {
-      error: `This ${mixMl} ml mix is rated for ${capacity} rolls; this run would be roll ${lastRoll}. ` +
-        'The datasheet does not cover going beyond that.',
-    };
-  }
-  if (pushStops && !canPush(kit, tempC)) {
-    return { error: `Push times are only given for ${Object.keys(kit.pushPerStopSec).join('/')}°C.` };
-  }
-  const group = rollGroup(kit, mixMl, firstRoll);
-  const pushSec = pushStops ? pushStops * kit.pushPerStopSec[tempC] : 0;
-  const notes = [];
-  if (rollGroup(kit, mixMl, lastRoll) !== group) {
-    notes.push('This run spans two columns of the time table; using the times for the first roll.');
-  }
-  return {
-    develop: table.develop[group] + pushSec,
-    bleachFix: table.bleachFix[group],
-    group,
-    pushSec,
-    notes,
-  };
-}
-
-// The full sequence of timed steps for a run.
-export function buildProgram(kit, opts) {
-  const times = runTimes(kit, opts);
-  if (times.error) return times;
-  const steps = kit.steps.map((s) => ({
-    ...s,
-    sec: typeof s.sec === 'string' ? times[s.sec] : s.sec,
-    temp: s.temp === 'process' ? `${opts.tempC}°C` : s.temp,
-  }));
-  return { steps, times };
-}
-
-// Seconds (from step start) at which to cue an agitation: continuous for
-// the first 30 s, then one gentle tilt every 15 s until the step ends.
-export function agitationCues(stepSec, { continuousSec = 30, everySec = 15 } = {}) {
-  const cues = [];
-  for (let t = continuousSec + everySec; t < stepSec; t += everySec) cues.push(t);
-  return cues;
+  return oneVol(ml, units);
 }
 
 export function formatDuration(sec) {
@@ -82,17 +45,87 @@ export function formatDuration(sec) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
+// ---------- Mixing ----------
+
+// Expand a bath definition into an ordered checklist.
+// bath: { water: { start, temp } | null, parts: [{ name, ml }], final }
+export function mixChecklist(bath) {
+  const items = [];
+  const start = bath.water?.start;
+  if (bath.water) items.push({ kind: 'water', ml: start ?? null, temp: bath.water.temp });
+  for (const p of bath.parts) items.push({ kind: 'part', name: p.name, ml: p.ml ?? null });
+  if (bath.final != null && bath.water) {
+    const partsKnown = bath.parts.every((p) => typeof p.ml === 'number');
+    const topUp = typeof start === 'number' && partsKnown
+      ? bath.final - start - bath.parts.reduce((a, p) => a + p.ml, 0)
+      : null;
+    if (topUp !== 0) items.push({ kind: 'topup', ml: topUp, final: bath.final });
+  }
+  return items;
+}
+
+// Total water in a bath, when every amount is known.
+export function totalWater(bath) {
+  if (bath.final == null || !bath.parts.every((p) => typeof p.ml === 'number')) return null;
+  return bath.final - bath.parts.reduce((a, p) => a + p.ml, 0);
+}
+
+// One-shot dilution "1+n": returns { stock, water } in ml for a tank volume.
+export function dilute(tankMl, waterParts) {
+  const stock = tankMl / (1 + waterParts);
+  return { stock: Math.round(stock), water: Math.round(tankMl - stock) };
+}
+
+// ---------- Times ----------
+
+// Index of the time-table column for a run whose first roll is `firstRoll`.
+export function rollGroup(firstRoll, rollsPerGroup) {
+  return Math.floor((firstRoll - 1) / rollsPerGroup);
+}
+
+// Validate a run and ask the kit for its step list.
+// opts: { mixKey, firstRoll, rolls, tankMl, ...kit option values }
+export function buildProgram(kit, opts) {
+  const mix = kit.mixes[opts.mixKey];
+  if (!mix) return { error: 'Pick a mix size.' };
+  const { firstRoll, rolls = 1 } = opts;
+  if (!Number.isInteger(firstRoll) || firstRoll < 1) return { error: 'Enter which roll number this is.' };
+  if (rolls < 1 || rolls > kit.maxRollsPerTank) {
+    return { error: `Develop at most ${kit.maxRollsPerTank} rolls at a time with this kit.` };
+  }
+  const lastRoll = firstRoll + rolls - 1;
+  if (lastRoll > mix.rolls) {
+    return {
+      error: `This mix is rated for ${mix.rolls} rolls; this run would be roll ${lastRoll}. ` +
+        'The instructions do not cover going beyond that.',
+    };
+  }
+  const out = kit.program({ ...opts, rolls, lastRoll, mix });
+  if (out.error) return out;
+  return { steps: out.steps.map((s) => ({ ...s, sec: Math.round(s.sec ?? 0) })), notes: out.notes ?? [] };
+}
+
+// Seconds (from step start) at which to cue an agitation. spec:
+// { initial: s of continuous agitation, every: s } — cues at each multiple
+// of `every` after the initial period. Continuous or unknown → no cues.
+export function agitationCues(stepSec, spec) {
+  if (!spec || spec.continuous || !spec.every) return [];
+  const cues = [];
+  for (let t = spec.every; t < stepSec; t += spec.every) if (t > (spec.initial ?? 0)) cues.push(t);
+  return cues;
+}
+
+// ---------- Dates ----------
+
 export function addWeeks(date, weeks) {
-  return new Date(new Date(date).getTime() + weeks * WEEK_MS);
+  return new Date(new Date(date).getTime() + weeks * 7 * DAY_MS);
 }
 
 export function daysUntil(date, now = new Date()) {
-  return Math.ceil((new Date(date).getTime() - new Date(now).getTime()) / (24 * 60 * 60 * 1000));
+  return Math.ceil((new Date(date).getTime() - new Date(now).getTime()) / DAY_MS);
 }
 
-// Use-by dates for a batch of mixed working solution.
+// Use-by dates for a batch: [{ name, date, note }].
 export function batchExpiry(kit, mixedOn) {
-  const out = {};
-  for (const [bath, weeks] of Object.entries(kit.keeping.mixed)) out[bath] = addWeeks(mixedOn, weeks);
-  return out;
+  return (kit.keeping?.mixed ?? []).map((k) => ({ ...k, date: addWeeks(mixedOn, k.weeks) }));
 }
