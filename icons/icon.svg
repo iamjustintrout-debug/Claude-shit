@@ -1,7 +1,65 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#ffb81c"/>
-  <rect x="176" y="96" width="160" height="40" rx="12" fill="#da291c"/>
-  <rect x="156" y="136" width="200" height="280" rx="36" fill="#1c1b22" stroke="#da291c" stroke-width="16"/>
-  <rect x="172" y="268" width="168" height="132" rx="22" fill="#6668c9"/>
-  <circle cx="256" cy="206" r="34" fill="none" stroke="#ffb81c" stroke-width="14"/>
+  <defs>
+    <linearGradient id="bottle" x1="0" x2="1">
+      <stop offset="0" stop-color="#d9d3cc"/>
+      <stop offset=".35" stop-color="#f3efea"/>
+      <stop offset="1" stop-color="#cfc8c1"/>
+    </linearGradient>
+    <linearGradient id="liquid" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f2c9a6" stop-opacity=".0"/>
+      <stop offset=".25" stop-color="#f0bf98" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#e9a97d" stop-opacity=".75"/>
+    </linearGradient>
+    <linearGradient id="label" x1="0" x2="1">
+      <stop offset="0" stop-color="#5557bd"/>
+      <stop offset=".45" stop-color="#da291c"/>
+      <stop offset="1" stop-color="#ffb81c"/>
+    </linearGradient>
+    <linearGradient id="cap" x1="0" x2="1">
+      <stop offset="0" stop-color="#e6e3df"/>
+      <stop offset=".4" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#dcd8d3"/>
+    </linearGradient>
+    <linearGradient id="rainbow" x1="0" x2="1">
+      <stop offset="0" stop-color="#6668c9"/>
+      <stop offset=".33" stop-color="#4fb6d8"/>
+      <stop offset=".66" stop-color="#ffb81c"/>
+      <stop offset="1" stop-color="#da291c"/>
+    </linearGradient>
+    <clipPath id="body">
+      <path d="M204 136h104v8c0 10 8 16 30 22l28 8c18 5 26 18 26 36v232c0 20-14 34-34 34H154c-20 0-34-14-34-34V210c0-18 8-31 26-36l28-8c22-6 30-12 30-22z"/>
+    </clipPath>
+  </defs>
+
+  <rect class="bg" width="512" height="512" rx="96" fill="#111015"/>
+
+  <!-- Cap with grip ridges -->
+  <rect x="190" y="44" width="132" height="80" rx="14" fill="url(#cap)"/>
+  <g stroke="#cfcac4" stroke-width="4">
+    <path d="M210 54v60M228 54v60M246 54v60M264 54v60M282 54v60M300 54v60"/>
+  </g>
+  <rect x="196" y="122" width="120" height="14" rx="4" fill="#d6d1cb"/>
+
+  <!-- Milky bottle with developer inside -->
+  <path d="M204 136h104v8c0 10 8 16 30 22l28 8c18 5 26 18 26 36v232c0 20-14 34-34 34H154c-20 0-34-14-34-34V210c0-18 8-31 26-36l28-8c22-6 30-12 30-22z" fill="url(#bottle)"/>
+  <g clip-path="url(#body)">
+    <rect x="100" y="196" width="312" height="300" fill="url(#liquid)"/>
+    <!-- side grip ribs -->
+    <g stroke="#bfb8b1" stroke-width="3" opacity=".7">
+      <path d="M126 240v190M386 240v190"/>
+    </g>
+  </g>
+
+  <!-- Label -->
+  <rect x="146" y="226" width="220" height="216" rx="10" fill="url(#label)"/>
+  <rect x="146" y="262" width="220" height="44" fill="#0d0c10"/>
+  <text x="256" y="294" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="800" font-size="30" fill="#ffffff" letter-spacing="2">DEV</text>
+  <rect x="146" y="306" width="220" height="5" fill="url(#rainbow)"/>
+  <rect x="146" y="311" width="220" height="30" fill="#ffffff"/>
+  <rect x="168" y="320" width="120" height="5" rx="2.5" fill="#2a2830"/>
+  <rect x="168" y="329" width="90" height="4" rx="2" fill="#6b6875"/>
+  <text x="256" y="390" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="24" fill="#fff6e0" opacity=".95">PART 1</text>
+
+  <!-- Gloss highlight -->
+  <path d="M132 214c0-12 6-22 18-26v250c-12-4-18-12-18-26z" fill="#ffffff" opacity=".4"/>
 </svg>
