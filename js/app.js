@@ -102,7 +102,8 @@ function showTab(name) {
   activeTab = name;
   try { sessionStorage.setItem(TAB_KEY, name); } catch { /* ignore */ }
   document.querySelectorAll('.tab').forEach((t) => { t.hidden = t.dataset.tab !== name; });
-  document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('active', b.dataset.go === name));
+  document.querySelectorAll('.tabs button, .home-btn').forEach((b) => b.classList.toggle('active', b.dataset.go === name));
+  $('.home-btn').setAttribute('aria-current', name === 'home' ? 'page' : 'false');
   renderHeader();
   if (name === 'home') renderHome();
   if (name === 'batch') renderBatch();
@@ -111,6 +112,15 @@ function showTab(name) {
   window.scrollTo(0, 0);
 }
 document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.go)));
+
+// A little bounce whenever the home button is pressed.
+$('.home-btn').addEventListener('click', (e) => {
+  const b = e.currentTarget;
+  b.classList.remove('pop');
+  void b.offsetWidth; // restart the animation
+  b.classList.add('pop');
+});
+$('.home-btn').addEventListener('animationend', (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.remove('pop'); });
 
 function segmented(container, values, current, label, onPick, sub) {
   container.replaceChildren(...values.map((v) => {

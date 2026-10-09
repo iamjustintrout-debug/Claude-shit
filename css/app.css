@@ -234,12 +234,26 @@ label textarea { resize: vertical; }
 .tabs button { padding: 16px 0; font-size: 15px; }
 
 /* Home button & dashboard */
+.brand { display: flex; align-items: center; gap: 12px; }
 .home-btn {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 0; border: 0; background: none; color: var(--accent);
-  font: inherit; font-weight: 700; cursor: pointer;
+  display: grid; place-items: center;
+  width: 44px; height: 44px; padding: 0;
+  border: 2px solid var(--accent); border-radius: 12px;
+  background: transparent; color: var(--accent);
+  cursor: pointer;
+  transition: background-color .25s ease, color .25s ease, box-shadow .25s ease;
+  -webkit-tap-highlight-color: transparent;
 }
-.home-btn svg { width: 22px; height: 22px; fill: currentColor; }
+.home-btn svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; transition: fill .25s ease; }
+.home-btn:active { transform: scale(.88); }
+/* On the dashboard: filled. Elsewhere: outlined. */
+.home-btn.active { background: var(--accent); color: var(--accent-text); box-shadow: 0 0 0 4px rgba(240, 160, 48, .18); }
+.home-btn.active svg { fill: currentColor; }
+.home-btn.pop { animation: home-pop .45s cubic-bezier(.3, 1.6, .5, 1); }
+.home-btn.pop svg { animation: home-bounce .45s ease-out; }
+@keyframes home-pop { 0% { transform: scale(.85); } 60% { transform: scale(1.12); } 100% { transform: scale(1); } }
+@keyframes home-bounce { 0% { transform: translateY(0); } 40% { transform: translateY(-3px); } 100% { transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .home-btn.pop, .home-btn.pop svg { animation: none; } }
 .section-title { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 20px 4px 4px; }
 .chem { display: grid; gap: 6px; }
 .chem.selected { border: 1px solid var(--accent); }
