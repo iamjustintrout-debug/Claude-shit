@@ -76,6 +76,11 @@
             <input type="number" id="dev-tank" min="1" step="any" inputmode="decimal">
           </label>
         </div>
+        <div class="card" id="dev-film-card">
+          <h2>Film</h2>
+          <div id="dev-films"></div>
+          <label>Format <select id="dev-format"></select></label>
+        </div>
         <div class="card" id="dev-toggles">
           <label class="check" id="dev-rotary-wrap"><input type="checkbox" id="dev-rotary"> Rotary processor (continuous rotation)</label>
           <div id="dev-presteps"></div>
@@ -124,6 +129,10 @@
       <div id="dev-done" class="card" hidden>
         <h2>Done!</h2>
         <p>Hang the film to dry.</p>
+        <p class="done-film" id="done-film"></p>
+        <label>Notes (optional)
+          <textarea id="done-notes" rows="3" placeholder="e.g. shot at box speed, Pentax K1000, beach trip"></textarea>
+        </label>
         <button class="btn primary wide" id="done-log"></button>
         <button class="btn ghost wide" id="done-back">Back without logging</button>
       </div>
@@ -143,6 +152,29 @@
         </div>
         <button class="btn wide" id="batch-save">Save</button>
         <button class="btn ghost wide danger" id="batch-reset">Clear this kit's batch</button>
+      </div>
+    </section>
+
+    <!-- ROLLS (log) -->
+    <section id="tab-rolls" class="tab" data-tab="rolls" hidden>
+      <div class="card" id="rolls-stats"></div>
+      <div class="card grid2">
+        <label>Search <input type="search" id="rolls-q" placeholder="Film, notes…"></label>
+        <label>Chemistry <select id="rolls-kit"></select></label>
+      </div>
+      <div id="rolls-list"></div>
+      <div class="card">
+        <h2>Add a past roll</h2>
+        <div id="rolls-add"></div>
+      </div>
+      <div class="card">
+        <h2>Backup</h2>
+        <p class="hint">Your roll log is stored only on this device. Export a backup now and then.</p>
+        <div class="btn-row">
+          <button class="btn" id="rolls-csv">Export spreadsheet (CSV)</button>
+          <button class="btn" id="rolls-json">Export backup</button>
+          <label class="btn file-btn">Import backup<input type="file" id="rolls-import" accept="application/json,.json" hidden></label>
+        </div>
       </div>
     </section>
 
@@ -180,6 +212,7 @@
     <button data-go="mix" class="active">Mix</button>
     <button data-go="develop">Develop</button>
     <button data-go="batch">Batch</button>
+    <button data-go="rolls">Rolls</button>
     <button data-go="guide">Guide</button>
   </nav>
 

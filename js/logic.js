@@ -129,3 +129,61 @@ export function daysUntil(date, now = new Date()) {
 export function batchExpiry(kit, mixedOn) {
   return (kit.keeping?.mixed ?? []).map((k) => ({ ...k, date: addWeeks(mixedOn, k.weeks) }));
 }
+
+// ---------- Roll log ----------
+
+// One log entry per roll in a finished run.
+// films: array (one per roll) of { id, name } — id null for typed-in films.
+export function makeLogEntries({ kit, opts, steps, films, format, notes, now = new Date() }) {
+  const dev = steps.find((s) => s.critical) ?? steps.find((s) => !s.manual);
+  const settings = kit.options
+    .filter((o) => !o.when || o.when(opts))
+    .map((o) => {
+      const c = o.choices.find((x) => x.value === opts[o.id]);
+      return { label: o.label, value: c?.label ?? opts[o.id], sub: c?.sub };
+    });
+  return films.map((film, i) => ({
+    id: `${now.getTime().toString(36)}-${i}-${Math.random().toString(36).slice(2, 7)}`,
+    date: now.toISOString(),
+    kitId: kit.id,
+    kitName: kit.name,
+    process: kit.process,
+    mixLabel: kit.mixes[opts.mixKey]?.label ?? opts.mixKey,
+    rollNo: opts.firstRoll + i,
+    film: { id: film.id ?? null, name: film.name },
+    format,
+    settings,
+    devName: dev?.name ?? '',
+    devSec: dev?.sec ?? null,
+    devTemp: dev?.temp ?? null,
+    notes: notes ?? '',
+  }));
+}
+
+function csvCell(v) {
+  const s = v == null ? '' : String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+export function settingText(s, units) {
+  const v = typeof s.value === 'object' ? fmtTemp(s.value, units) : s.value;
+  return `${s.label}: ${v}${s.sub ? ` (${s.sub})` : ''}`;
+}
+
+export function logToCSV(entries, units = 'metric') {
+  const head = ['Date', 'Film', 'Format', 'Chemistry', 'Process', 'Mix', 'Roll #', 'Settings', 'Developer step', 'Dev time', 'Dev temp', 'Notes'];
+  const rows = entries.map((e) => [
+    e.date.slice(0, 10), e.film.name, e.format, e.kitName, e.process, e.mixLabel, e.rollNo,
+    e.settings.map((s) => settingText(s, units)).join('; '),
+    e.devName, e.devSec != null ? formatDuration(e.devSec) : '', fmtTemp(e.devTemp, units), e.notes,
+  ]);
+  return [head, ...rows].map((r) => r.map(csvCell).join(',')).join('\n');
+}
+
+// Validate imported log data; returns only well-formed entries.
+export function sanitizeLog(data) {
+  if (!Array.isArray(data)) return [];
+  return data.filter((e) => e && typeof e.id === 'string' && typeof e.date === 'string' && !Number.isNaN(Date.parse(e.date))
+    && e.film && typeof e.film.name === 'string')
+    .map((e) => ({ settings: [], notes: '', format: '', ...e, settings: Array.isArray(e.settings) ? e.settings : [] }));
+}

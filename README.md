@@ -20,6 +20,11 @@ Pick your chemistry at the top, and the whole app follows it:
   - Agitation reminders beep and vibrate. Use the kit's own pattern, or pick every 15/30/60 s.
   - The screen stays awake while it runs.
 - **Batch:** rolls developed and use-by dates, tracked separately for each kit.
+- **Rolls:** a log of every roll you develop.
+  - Records the film (picked from a list of colour C-41, E-6 and ECN-2 stocks, or typed in), format,
+    chemistry, settings, developer time and temperature, and your notes.
+  - Search, filter, edit or delete entries, and add past rolls by hand.
+  - Export it as a CSV spreadsheet or a backup file, and import the backup on another device.
 - **Guide:** processing notes, keeping times and troubleshooting for the selected kit.
 - **Units:** the header toggle switches between °C/ml and °F/fl oz.
 
@@ -42,6 +47,7 @@ npm test    # unit tests for mixing/time logic and every kit
 
 - `js/kits.js`: every kit's recipes and processing program. Add a kit by adding an entry. Mark it
   `verified: true` only once checked against the printed sheet.
-- `js/logic.js`: pure calculation and unit-formatting functions (tested in `tests/`).
+- `js/films.js`: the film catalog for the picker.
+- `js/logic.js`: pure calculation, unit-formatting and roll-log functions (tested in `tests/`).
 - `js/app.js`: UI.
 - `sw.js`: offline cache. **Bump `VERSION` whenever any file changes** so installed copies update.

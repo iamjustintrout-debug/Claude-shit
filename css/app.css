@@ -203,3 +203,32 @@ label.check input { width: 22px; height: 22px; margin: 0; accent-color: var(--ac
   font-weight: 600;
 }
 .tabs button.active { color: var(--accent); }
+
+/* Film picker & roll log */
+label textarea, .film-pick select, .film-pick input {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+label textarea { resize: vertical; }
+.film-pick input { margin-top: 8px; }
+#dev-films { margin-bottom: 12px; }
+.film-roll + .film-roll { margin-top: 10px; }
+.done-film { font-weight: 700; color: var(--accent); }
+.stat-row { display: flex; gap: 32px; }
+.roll { display: grid; gap: 6px; }
+.roll-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 17px; }
+.chip { flex: none; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.roll-line { font-size: 14px; }
+.roll-notes { margin: 0; font-size: 14px; color: var(--muted); font-style: italic; white-space: pre-wrap; }
+.roll.editing { border: 1px solid var(--accent); }
+.roll-form { display: grid; gap: 12px; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.file-btn { cursor: pointer; }
+.tabs button { padding: 16px 0; font-size: 15px; }

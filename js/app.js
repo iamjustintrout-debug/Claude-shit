@@ -1,7 +1,9 @@
 import { KITS, DEFAULT_KIT } from './kits.js';
+import { FILM_FORMATS, filmGroups, filmLabel, findFilm } from './films.js';
 import {
   buildProgram, agitationCues, formatDuration, fmtTemp, fmtTol, fmtVol, mlToFlOz, ML_PER_FL_OZ,
   mixChecklist, totalWater, addWeeks, daysUntil, batchExpiry,
+  makeLogEntries, logToCSV, sanitizeLog, settingText,
 } from './logic.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -20,7 +22,8 @@ const DEFAULT_STATE = {
   units: 'metric',
   batches: {}, // kitId -> { mixKey, mixedOn: 'YYYY-MM-DD', rolls }
   kitMeta: {}, // kitId -> { openedOn, portionUsed }
-  prefs: { mixKey: {}, opts: {}, rotary: false, tankMl: 500, agit: 'kit' },
+  customFilms: [], // film names typed in with "Other"
+  prefs: { mixKey: {}, opts: {}, rotary: false, tankMl: 500, agit: 'kit', film: {}, format: '35mm' },
 };
 
 // v1 only knew the C-TEC kit and kept its batch at the top level.
@@ -97,6 +100,7 @@ function showTab(name) {
   document.querySelectorAll('.tab').forEach((t) => { t.hidden = t.dataset.tab !== name; });
   document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('active', b.dataset.go === name));
   if (name === 'batch') renderBatch();
+  if (name === 'rolls') renderRolls();
   if (name === 'develop' && !run) syncDevFromBatch();
   window.scrollTo(0, 0);
 }
@@ -201,6 +205,7 @@ function syncDevFromBatch() {
     return el('label', { className: 'check' }, cb, p.label);
   }));
   $('#dev-toggles').hidden = !k.rotary && !(k.preSteps ?? []).length;
+  renderDevFilms();
   renderProgram();
 }
 
@@ -286,7 +291,7 @@ function renderProgram() {
 
 dev.mix.addEventListener('input', renderProgram);
 dev.first.addEventListener('input', renderProgram);
-dev.rolls.addEventListener('input', renderProgram);
+dev.rolls.addEventListener('input', () => { renderDevFilms(); renderProgram(); });
 dev.agit.addEventListener('change', () => { state.prefs.agit = dev.agit.value; save(); renderProgram(); });
 dev.rotary.addEventListener('change', () => { state.prefs.rotary = dev.rotary.checked; save(); renderProgram(); });
 dev.tank.addEventListener('input', () => {
@@ -297,6 +302,75 @@ dev.tank.addEventListener('input', () => {
     renderProgram();
   }
 });
+
+// ---------- Film picker ----------
+
+const OTHER = '__other';
+
+function filmPicker(value, process, onChange) {
+  const sel = el('select');
+  sel.append(el('option', { value: '', textContent: 'Choose film…' }));
+  if (state.customFilms.length) {
+    sel.append(el('optgroup', { label: 'Your films' },
+      ...state.customFilms.map((n) => el('option', { value: `custom:${n}`, textContent: n }))));
+  }
+  for (const g of filmGroups(process)) {
+    sel.append(el('optgroup', { label: g.label }, ...g.films.map((f) => el('option', { value: f.id, textContent: filmLabel(f) }))));
+  }
+  sel.append(el('option', { value: OTHER, textContent: 'Other (type it in)…' }));
+  sel.value = [...sel.options].some((o) => o.value === value) ? value : '';
+  const input = el('input', { type: 'text', placeholder: 'Film name', hidden: true, autocomplete: 'off' });
+  sel.addEventListener('change', () => {
+    input.hidden = sel.value !== OTHER;
+    if (!input.hidden) input.focus();
+    onChange?.(sel.value);
+  });
+  return {
+    root: el('div', { className: 'film-pick' }, sel, input),
+    get() {
+      if (sel.value === OTHER) {
+        const name = input.value.trim();
+        return name ? { id: null, name, custom: true } : null;
+      }
+      if (sel.value.startsWith('custom:')) return { id: null, name: sel.value.slice(7) };
+      const f = findFilm(sel.value);
+      return f ? { id: f.id, name: filmLabel(f) } : null;
+    },
+  };
+}
+
+const filmValue = (film) => (film.id ?? `custom:${film.name}`);
+
+function rememberCustomFilms(films) {
+  for (const f of films) {
+    if (f?.custom && !state.customFilms.includes(f.name)) state.customFilms.push(f.name);
+  }
+  state.customFilms.sort((a, b) => a.localeCompare(b));
+}
+
+function formatSelect(value) {
+  const sel = el('select', {}, ...FILM_FORMATS.map((f) => el('option', { value: f, textContent: f })));
+  sel.value = FILM_FORMATS.includes(value) ? value : FILM_FORMATS[0];
+  return sel;
+}
+
+let devFilmPickers = [];
+function renderDevFilms() {
+  const n = Number(dev.rolls.value) || 1;
+  const saved = state.prefs.film[state.kitId] ?? [];
+  devFilmPickers = Array.from({ length: n }, (_, i) => filmPicker(saved[i] ?? saved[0] ?? '', kit().process, (v) => {
+    (state.prefs.film[state.kitId] ??= [])[i] = v === OTHER ? '' : v;
+    save();
+  }));
+  $('#dev-films').replaceChildren(...devFilmPickers.map((p, i) =>
+    (n > 1 ? el('label', { className: 'film-roll' }, `Roll ${i + 1}`, p.root) : p.root)));
+  const fmt = $('#dev-format');
+  if (!fmt.options.length) {
+    fmt.append(...FILM_FORMATS.map((f) => el('option', { value: f, textContent: f })));
+    fmt.addEventListener('change', () => { state.prefs.format = fmt.value; save(); });
+  }
+  fmt.value = state.prefs.format;
+}
 
 // ---------- Develop: running ----------
 
@@ -469,7 +543,10 @@ function finishRun() {
   $('#dev-done').hidden = false;
   const { firstRoll, rolls, mixKey } = run.opts;
   const total = firstRoll - 1 + rolls;
-  $('#done-log').textContent = `Log ${rolls} roll${rolls > 1 ? 's' : ''} (${total} of ${kit().mixes[mixKey].rolls} used)`;
+  run.films = devFilmPickers.map((p) => p.get() ?? { id: null, name: 'Unknown film' });
+  $('#done-film').textContent = `${run.films.map((f) => f.name).join(' + ')} · ${$('#dev-format').value}`;
+  $('#done-notes').value = '';
+  $('#done-log').textContent = `Save to roll log (${total} of ${kit().mixes[mixKey].rolls} used)`;
   keepAwake(false);
 }
 
@@ -489,9 +566,15 @@ $('#done-log').addEventListener('click', () => {
   const b = (state.batches[state.kitId] ??= { mixKey, mixedOn: today(), rolls: 0 });
   b.mixKey = mixKey;
   b.rolls = firstRoll - 1 + rolls;
+  rememberCustomFilms(run.films);
+  rollLog.push(...makeLogEntries({
+    kit: kit(), opts: run.opts, steps: run.steps, films: run.films,
+    format: $('#dev-format').value, notes: $('#done-notes').value.trim(),
+  }));
+  saveLog();
   save();
   endRun();
-  showTab('batch');
+  showTab('rolls');
 });
 $('#done-back').addEventListener('click', endRun);
 
@@ -624,6 +707,168 @@ $('#batch-reset').addEventListener('click', () => {
   renderBatch();
 });
 
+// ---------- Roll log ----------
+
+const LOG_KEY = 'filmdev.log.v1';
+let rollLog = loadLog();
+let editingId = null;
+
+function loadLog() {
+  try { return sanitizeLog(JSON.parse(localStorage.getItem(LOG_KEY)) ?? []); } catch { return []; }
+}
+function saveLog() {
+  try { localStorage.setItem(LOG_KEY, JSON.stringify(rollLog)); } catch { alert('Could not save the roll log on this device.'); }
+}
+// Ask the browser not to evict our data under storage pressure.
+navigator.storage?.persist?.().catch(() => {});
+
+const sortedLog = () => [...rollLog].sort((a, b) => b.date.localeCompare(a.date) || (b.rollNo ?? 0) - (a.rollNo ?? 0));
+
+function renderRollStats() {
+  const year = String(new Date().getFullYear());
+  const counts = {};
+  for (const e of rollLog) counts[e.film.name] = (counts[e.film.name] ?? 0) + 1;
+  const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  $('#rolls-stats').replaceChildren(
+    el('h2', { textContent: 'Roll log' }),
+    el('div', { className: 'stat-row' },
+      el('div', {}, el('div', { className: 'big-num', textContent: rollLog.length }), el('div', { className: 'hint', textContent: 'rolls logged' })),
+      el('div', {}, el('div', { className: 'big-num', textContent: rollLog.filter((e) => e.date.startsWith(year)).length }), el('div', { className: 'hint', textContent: `in ${year}` }))),
+    top.length ? el('p', { className: 'hint', textContent: `Most used: ${top.map(([n, c]) => `${n} (${c})`).join(', ')}` }) : null);
+}
+
+function rollCard(e) {
+  if (e.id === editingId) return rollEditor(e);
+  const dev = e.devSec != null ? `${e.devName} ${formatDuration(e.devSec)}${e.devTemp ? ` at ${T(e.devTemp)}` : ''}` : '';
+  const meta = [fmtDate(e.date), e.kitName, e.rollNo ? `roll #${e.rollNo}` : null, e.mixLabel || null].filter(Boolean).join(' · ');
+  const edit = el('button', { className: 'btn small', textContent: 'Edit' });
+  edit.addEventListener('click', () => { editingId = e.id; renderRolls(); });
+  const del = el('button', { className: 'btn small ghost danger', textContent: 'Delete' });
+  del.addEventListener('click', () => {
+    if (!confirm(`Delete this ${e.film.name} roll from the log?`)) return;
+    rollLog = rollLog.filter((x) => x.id !== e.id);
+    saveLog();
+    renderRolls();
+  });
+  return el('div', { className: 'card roll' },
+    el('div', { className: 'roll-head' }, el('b', { textContent: e.film.name }), e.format ? el('span', { className: 'chip', textContent: e.format }) : null),
+    el('div', { className: 'hint', textContent: meta }),
+    e.settings.length ? el('div', { className: 'roll-line', textContent: e.settings.map((x) => settingText(x, units())).join(' · ') }) : null,
+    dev ? el('div', { className: 'roll-line', textContent: dev }) : null,
+    e.notes ? el('p', { className: 'roll-notes', textContent: e.notes }) : null,
+    el('div', { className: 'btn-row' }, edit, del));
+}
+
+function rollForm({ film, format, date, notes, kitId, withKit }) {
+  const picker = filmPicker(film, KITS[kitId]?.process ?? 'C-41');
+  const fmt = formatSelect(format);
+  const dateIn = el('input', { type: 'date', value: date });
+  const notesIn = el('textarea', { rows: 2, value: notes ?? '' });
+  const kitSel = withKit ? el('select', {}, ...Object.values(KITS).map((k) => el('option', { value: k.id, textContent: k.name })),
+    el('option', { value: '', textContent: 'Other / lab' })) : null;
+  if (kitSel) kitSel.value = kitId ?? '';
+  const root = el('div', { className: 'roll-form' },
+    el('label', {}, 'Film', picker.root),
+    el('div', { className: 'grid2' }, el('label', {}, 'Format', fmt), el('label', {}, 'Date', dateIn)),
+    kitSel ? el('label', {}, 'Chemistry', kitSel) : null,
+    el('label', {}, 'Notes', notesIn));
+  return { root, read: () => ({ film: picker.get(), format: fmt.value, date: dateIn.value, notes: notesIn.value.trim(), kitId: kitSel?.value }) };
+}
+
+function rollEditor(e) {
+  const form = rollForm({ film: filmValue(e.film), format: e.format, date: e.date.slice(0, 10), notes: e.notes, kitId: e.kitId });
+  const saveBtn = el('button', { className: 'btn primary small', textContent: 'Save' });
+  const cancel = el('button', { className: 'btn small ghost', textContent: 'Cancel' });
+  saveBtn.addEventListener('click', () => {
+    const v = form.read();
+    if (!v.film) return alert('Choose a film or type its name.');
+    rememberCustomFilms([v.film]);
+    Object.assign(e, {
+      film: { id: v.film.id, name: v.film.name }, format: v.format, notes: v.notes,
+      date: v.date && v.date !== e.date.slice(0, 10) ? `${v.date}T12:00:00.000Z` : e.date,
+    });
+    editingId = null;
+    saveLog(); save();
+    renderRolls();
+  });
+  cancel.addEventListener('click', () => { editingId = null; renderRolls(); });
+  return el('div', { className: 'card roll editing' }, form.root, el('div', { className: 'btn-row' }, saveBtn, cancel));
+}
+
+function renderRolls() {
+  renderRollStats();
+  const kf = $('#rolls-kit');
+  if (!kf.options.length) {
+    kf.append(el('option', { value: '', textContent: 'All' }), ...Object.values(KITS).map((k) => el('option', { value: k.id, textContent: k.name })));
+  }
+  const q = $('#rolls-q').value.trim().toLowerCase();
+  const list = sortedLog().filter((e) => (!kf.value || e.kitId === kf.value)
+    && (!q || `${e.film.name} ${e.notes} ${e.format} ${e.kitName}`.toLowerCase().includes(q)));
+  $('#rolls-list').replaceChildren(...(list.length ? list.map(rollCard) : [el('p', { className: 'hint center',
+    textContent: rollLog.length ? 'No rolls match.' : 'No rolls yet. Finish a development run and tap "Save to roll log", or add a past roll below.' })]));
+  renderAddRoll();
+}
+$('#rolls-q').addEventListener('input', renderRolls);
+$('#rolls-kit').addEventListener('change', renderRolls);
+
+function renderAddRoll() {
+  const form = rollForm({ film: '', format: state.prefs.format, date: today(), notes: '', kitId: state.kitId, withKit: true });
+  const add = el('button', { className: 'btn primary wide', textContent: 'Add roll' });
+  add.addEventListener('click', () => {
+    const v = form.read();
+    if (!v.film) return alert('Choose a film or type its name.');
+    const k = KITS[v.kitId];
+    rememberCustomFilms([v.film]);
+    rollLog.push({
+      id: `${Date.now().toString(36)}-m-${Math.random().toString(36).slice(2, 7)}`,
+      date: `${v.date || today()}T12:00:00.000Z`,
+      kitId: k?.id ?? '', kitName: k?.name ?? 'Other / lab', process: k?.process ?? '', mixLabel: '', rollNo: null,
+      film: { id: v.film.id, name: v.film.name }, format: v.format, settings: [], devName: '', devSec: null, devTemp: null, notes: v.notes,
+    });
+    saveLog(); save();
+    renderRolls();
+  });
+  $('#rolls-add').replaceChildren(form.root, add);
+}
+
+function download(name, text, type) {
+  const blob = new Blob([text], { type });
+  const file = new File([blob], name, { type });
+  if (navigator.canShare?.({ files: [file] })) {
+    navigator.share({ files: [file], title: name }).catch(() => {});
+    return;
+  }
+  const a = el('a', { href: URL.createObjectURL(blob), download: name });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+$('#rolls-csv').addEventListener('click', () => download(`devapp-rolls-${today()}.csv`, logToCSV(sortedLog(), units()), 'text/csv'));
+$('#rolls-json').addEventListener('click', () => download(`devapp-backup-${today()}.json`,
+  JSON.stringify({ app: 'DevApp', version: 1, rolls: rollLog, customFilms: state.customFilms }, null, 2), 'application/json'));
+$('#rolls-import').addEventListener('change', async (ev) => {
+  const file = ev.target.files?.[0];
+  ev.target.value = '';
+  if (!file) return;
+  try {
+    const data = JSON.parse(await file.text());
+    const incoming = sanitizeLog(Array.isArray(data) ? data : data.rolls);
+    const have = new Set(rollLog.map((e) => e.id));
+    const added = incoming.filter((e) => !have.has(e.id));
+    rollLog.push(...added);
+    if (Array.isArray(data.customFilms)) {
+      rememberCustomFilms(data.customFilms.filter((n) => typeof n === 'string').map((name) => ({ name, custom: true })));
+    }
+    saveLog(); save();
+    renderRolls();
+    alert(`Imported ${added.length} roll${added.length === 1 ? '' : 's'}${incoming.length > added.length ? ` (${incoming.length - added.length} already in the log)` : ''}.`);
+  } catch {
+    alert("That file isn't a DevApp backup.");
+  }
+});
+
 // ---------- Guide ----------
 
 function renderGuide() {
@@ -663,6 +908,7 @@ function renderAll() {
   if (!run) syncDevFromBatch();
   renderGuide();
   if (activeTab === 'batch') renderBatch();
+  if (activeTab === 'rolls') renderRolls();
 }
 
 renderAll();
