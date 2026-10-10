@@ -101,7 +101,10 @@ $('#kit').addEventListener('change', () => {
 function renderHeader() {
   $('#kit').value = state.kitId;
   $('#kit').disabled = !!run;
-  $('#kit-banner').hidden = kit().verified || !!run || activeTab === 'home' || activeTab === 'rolls' || activeTab === 'settings';
+  const general = activeTab === 'home' || activeTab === 'rolls' || activeTab === 'settings';
+  $('#kit-banner').hidden = kit().verified || !!run || general;
+  // The picker only matters on kit-specific pages (Develop, Batch, Mix, Guide).
+  $('.kit-pick').hidden = general;
 }
 
 // ---------- Tabs ----------
@@ -1570,7 +1573,7 @@ function introCard(isNew) {
       el('h2', { textContent: 'Develop film at home, step by step' }),
       el('p', { textContent: 'DevApp guides you through developing your own film: mixing the chemistry, timing every step, and keeping a record of each roll.' }),
       flowSteps(false),
-      el('p', { className: 'hint', textContent: 'First, choose the chemistry kit you have at the top of the screen.' }),
+      el('p', { className: 'hint', textContent: 'Tap Get started, choose the chemistry kit you have at the top of the Mix page, and follow the steps.' }),
       go);
   }
   return el('div', { className: 'card intro slim' },
@@ -1657,25 +1660,50 @@ function activitySection() {
   return items;
 }
 
+// Chips for switching between mixed chemistries; picking one also selects
+// that kit for Develop, Batch, Mix and Guide.
+function chemSwitcher(entries, shownId, rank) {
+  return el('div', { className: 'chem-switch', role: 'radiogroup', ariaLabel: 'Chemistry to show' }, ...entries.map((e) => {
+    const [id, b] = e;
+    const k = KITS[id];
+    const cap = k.mixes[b.mixKey].rolls;
+    const chip = el('button', { type: 'button', className: `chem-chip${rank(e) ? ' used' : ''}` },
+      el('span', { className: 'chip-dot', ariaHidden: 'true' }),
+      el('span', { className: 'chip-name', textContent: k.name }),
+      el('span', { className: 'chip-count', textContent: `${b.rolls}/${cap}` }));
+    chip.setAttribute('role', 'radio');
+    chip.setAttribute('aria-checked', String(id === shownId));
+    chip.addEventListener('click', () => { if (id !== state.kitId) selectKit(id); });
+    return chip;
+  }));
+}
+
 function renderHome() {
   const entries = Object.entries(state.batches).filter(([id, b]) => KITS[id] && b && KITS[id].mixes[b.mixKey]);
   const rank = ([id, b]) => (b.rolls >= KITS[id].mixes[b.mixKey].rolls ? 1 : 0);
   entries.sort((a, b) => rank(a) - rank(b) || b[1].mixedOn.localeCompare(a[1].mixedOn));
-  const active = entries.find((e) => rank(e) === 0);
   const isNew = !entries.length && !rollLog.length;
+  // Which chemistry the dashboard is about: the selected kit if it has a batch,
+  // otherwise the first active one.
+  const shown = entries.find(([id]) => id === state.kitId) ?? entries.find((e) => rank(e) === 0) ?? entries[0];
+  const shownActive = shown && rank(shown) === 0 ? shown : null;
 
-  const items = [introCard(isNew), nextUpCard(active)];
-  if (!isNew) items.push(...activitySection());
+  const items = [introCard(isNew), nextUpCard(shownActive)];
 
-  items.push(sectionHead('Chemistry in use', 'Each batch you\'ve mixed: rolls developed, rolls left, and when it expires.'));
-  if (entries.length) {
-    items.push(...entries.map(([id, b]) => chemCard(KITS[id], b)));
+  items.push(sectionHead('Chemistry in use', entries.length > 1
+    ? 'You have more than one batch mixed. Pick one to see its details.'
+    : 'Your mixed batch: rolls developed, rolls left, and when it expires.'));
+  if (entries.length > 1) items.push(chemSwitcher(entries, shown[0], rank));
+  if (shown) {
+    items.push(chemCard(KITS[shown[0]], shown[1]));
   } else {
     const mixBtn = el('button', { className: 'btn primary wide', textContent: 'Mix chemistry' });
     mixBtn.addEventListener('click', () => showTab('mix'));
     items.push(el('div', { className: 'card' },
-      el('p', { textContent: 'No chemistry mixed yet. Pick your kit at the top, then mix a batch.' }), mixBtn));
+      el('p', { textContent: 'No chemistry mixed yet. On the Mix page, choose your kit and mix a batch.' }), mixBtn));
   }
+
+  if (!isNew) items.push(...activitySection());
 
   if (!isNew) {
     const recent = sortedLog().slice(0, 3);
