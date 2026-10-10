@@ -191,3 +191,47 @@ export function sanitizeLog(data) {
       photos: Array.isArray(e.photos) ? e.photos.filter((p) => typeof p === 'string' && /^p-[a-z0-9-]+$/.test(p)) : [],
     }));
 }
+
+// ---------- Activity stats for the dashboard ----------
+
+const DAY = 24 * 60 * 60 * 1000;
+
+// Counts from the roll log. Windows are rolling (last 7 / 30 days), and the
+// weekly series is 8 rolling 7-day buckets ending today, oldest first.
+export function rollStats(entries, now = new Date()) {
+  const end = new Date(now);
+  end.setHours(23, 59, 59, 999);
+  const t = end.getTime();
+  const ageDays = (e) => (t - new Date(e.date).getTime()) / DAY;
+  const within = (days) => entries.filter((e) => { const a = ageDays(e); return a >= 0 && a < days; });
+  const year = String(now.getFullYear());
+
+  const weeks = Array.from({ length: 8 }, (_, i) => {
+    const startDay = new Date(t - (8 - i) * 7 * DAY + 1);
+    const n = entries.filter((e) => { const a = ageDays(e); return a >= (7 - i) * 7 && a < (8 - i) * 7; }).length;
+    return { start: startDay, count: n };
+  });
+
+  const tally = (list, key) => {
+    const m = new Map();
+    for (const e of list) {
+      const k = key(e);
+      if (!k) continue;
+      const cur = m.get(k) ?? { name: k, count: 0, last: e.date };
+      cur.count += 1;
+      if (e.date > cur.last) cur.last = e.date;
+      m.set(k, cur);
+    }
+    return [...m.values()].sort((a, b) => b.count - a.count || b.last.localeCompare(a.last));
+  };
+  const last30 = within(30);
+  return {
+    last7: within(7).length,
+    last30: last30.length,
+    year: entries.filter((e) => e.date.startsWith(year)).length,
+    total: entries.length,
+    weeks,
+    films30: tally(last30, (e) => e.film?.name),
+    kits30: tally(last30, (e) => e.kitName),
+  };
+}

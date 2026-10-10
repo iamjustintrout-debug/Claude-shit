@@ -48,3 +48,21 @@ test('sanitizeLog drops malformed imports', () => {
   assert.deepEqual(out[0].settings, []);
   assert.deepEqual(sanitizeLog({}), []);
 });
+
+test('rollStats: rolling windows, weekly buckets and 30-day tallies', async () => {
+  const { rollStats } = await import('../js/logic.js');
+  const now = new Date('2026-10-10T12:00:00');
+  const day = (n, film, kit = 'C-TEC 41') => ({ date: new Date(now.getTime() - n * 864e5).toISOString(), film: { name: film }, kitName: kit });
+  const log = [day(0, 'Portra 400'), day(1, 'Portra 400'), day(6, 'Gold 200'), day(8, 'Portra 400', 'Cs41'), day(29, 'Ektar 100'), day(40, 'Gold 200'), day(400, 'Portra 400')];
+  const s = rollStats(log, now);
+  assert.equal(s.last7, 3);
+  assert.equal(s.last30, 5);
+  assert.equal(s.total, 7);
+  assert.equal(s.year, 6);
+  assert.equal(s.weeks.length, 8);
+  assert.equal(s.weeks.at(-1).count, 3);   // this week
+  assert.equal(s.weeks.at(-2).count, 1);   // 8 days ago
+  assert.equal(s.weeks.reduce((a, w) => a + w.count, 0), 6); // 400-day-old roll excluded, 40 days included
+  assert.deepEqual(s.films30.map((f) => [f.name, f.count]), [['Portra 400', 3], ['Gold 200', 1], ['Ektar 100', 1]]);
+  assert.deepEqual(s.kits30.map((k) => [k.name, k.count]), [['C-TEC 41', 4], ['Cs41', 1]]);
+});

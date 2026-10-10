@@ -4,7 +4,7 @@ import { putPhoto, getPhoto, deletePhoto, newPhotoId, processImage, blobToDataUR
 import {
   buildProgram, agitationCues, formatDuration, fmtTemp, fmtTol, fmtVol, mlToFlOz, ML_PER_FL_OZ,
   mixChecklist, totalWater, addWeeks, daysUntil, batchExpiry,
-  makeLogEntries, logToCSV, sanitizeLog, settingText,
+  makeLogEntries, logToCSV, sanitizeLog, settingText, rollStats,
 } from './logic.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -1534,12 +1534,140 @@ function selectKit(id) {
   renderAll();
 }
 
+// Section heading with a one-line explanation underneath.
+function sectionHead(title, sub) {
+  return el('div', { className: 'section-head' },
+    el('h2', { className: 'section-title', textContent: title }),
+    sub ? el('p', { className: 'section-sub', textContent: sub }) : null);
+}
+
+// Reuse the tab bar's icons so the dashboard and tabs match.
+const tabIcon = (tab) => document.querySelector(`.tabs [data-go="${tab}"] svg`)?.cloneNode(true) ?? null;
+
+const FLOW = [
+  { tab: 'mix', title: 'Mix', text: 'Make up working chemistry from your kit, with every amount worked out.' },
+  { tab: 'develop', title: 'Develop', text: 'A step-by-step timer for each bath that beeps when to agitate.' },
+  { tab: 'rolls', title: 'Log', text: 'Save each roll\'s film, times and photos to look back on.' },
+];
+
+function flowSteps(compact) {
+  return el('ol', { className: `flow${compact ? ' compact' : ''}` }, ...FLOW.map((f, i) => {
+    const b = el('button', { type: 'button', className: 'flow-step' },
+      el('span', { className: 'flow-icon' }, tabIcon(f.tab)),
+      el('span', { className: 'flow-text' },
+        el('b', {}, el('span', { className: 'flow-no', textContent: i + 1 }), f.title),
+        compact ? null : el('small', { textContent: f.text })));
+    b.addEventListener('click', () => showTab(f.tab));
+    return el('li', {}, b);
+  }));
+}
+
+function introCard(isNew) {
+  if (isNew) {
+    const go = el('button', { className: 'btn primary wide', textContent: 'Get started: mix your chemistry' });
+    go.addEventListener('click', () => showTab('mix'));
+    return el('div', { className: 'card intro' },
+      el('h2', { textContent: 'Develop film at home, step by step' }),
+      el('p', { textContent: 'DevApp guides you through developing your own film: mixing the chemistry, timing every step, and keeping a record of each roll.' }),
+      flowSteps(false),
+      el('p', { className: 'hint', textContent: 'First, choose the chemistry kit you have at the top of the screen.' }),
+      go);
+  }
+  return el('div', { className: 'card intro slim' },
+    el('p', { className: 'intro-tag', textContent: 'Your home film lab: mix, develop and log every roll.' }),
+    flowSteps(true));
+}
+
+// The most useful next action, from your active chemistry.
+function nextUpCard(active) {
+  if (!active) return null;
+  const [id, b] = active;
+  const k = KITS[id];
+  const prog = buildProgram(k, { ...kitOpts(k), mixKey: b.mixKey, firstRoll: b.rolls + 1, rolls: 1, tankMl: state.prefs.tankMl });
+  const d = prog.steps?.find((x) => x.critical);
+  const go = el('button', { className: 'btn primary', textContent: 'Start developing' });
+  go.addEventListener('click', () => { selectKit(id); showTab('develop'); });
+  return el('div', { className: 'card next-up' },
+    el('span', { className: 'next-label', textContent: 'Next up' }),
+    el('b', { textContent: `Roll #${b.rolls + 1} in ${k.name}` }),
+    d ? el('span', { className: 'hint', textContent: `${d.name} ${formatDuration(d.sec)} at ${T(d.temp)}` }) : null,
+    go);
+}
+
+function statTile(value, label) {
+  return el('div', { className: 'stat' }, el('span', { className: 'stat-num', textContent: value }), el('span', { className: 'stat-label', textContent: label }));
+}
+
+const shortDate = (d) => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+// Rolls per week (last 8 weeks): one series, so one colour and no legend.
+// Tap a bar to read its exact count.
+function weekChart(weeks) {
+  const max = Math.max(1, ...weeks.map((w) => w.count));
+  const readout = el('p', { className: 'chart-readout' });
+  const show = (i) => {
+    const w = weeks[i];
+    readout.textContent = `${i === weeks.length - 1 ? 'This week' : `Week of ${shortDate(w.start)}`}: ${w.count} roll${w.count === 1 ? '' : 's'}`;
+    bars.forEach((b, j) => b.classList.toggle('sel', j === i));
+  };
+  const bars = weeks.map((w, i) => {
+    const b = el('button', { type: 'button', className: 'wk-bar', ariaLabel: `Week of ${shortDate(w.start)}: ${w.count} roll${w.count === 1 ? '' : 's'}` },
+      w.count ? el('span', { className: 'wk-val', textContent: w.count }) : null,
+      el('span', { className: 'wk-fill', style: `height:${w.count ? Math.max(6, (w.count / max) * 82) : 0}%` }));
+    b.addEventListener('click', () => show(i));
+    return b;
+  });
+  const labels = weeks.map((w, i) => el('span', { textContent: i === weeks.length - 1 ? 'Now' : shortDate(w.start) }));
+  const chart = el('div', { className: 'chart' },
+    el('div', { className: 'chart-head' }, el('b', { textContent: 'Rolls per week' }), el('span', { className: 'hint', textContent: 'last 8 weeks' })),
+    el('div', { className: 'wk-plot' }, ...bars),
+    el('div', { className: 'wk-axis' }, ...labels),
+    readout);
+  show(weeks.length - 1);
+  return chart;
+}
+
+function countTable(title, rows, noun) {
+  return el('table', { className: 'tbl count-tbl' },
+    el('thead', {}, el('tr', {}, el('th', { textContent: title }), el('th', { className: 'num', textContent: 'Rolls' }))),
+    el('tbody', {}, ...rows.slice(0, 5).map((r) => el('tr', {},
+      el('td', {}, r.name, el('span', { className: 'sub', textContent: `last ${shortDate(r.last)}` })),
+      el('td', { className: 'num', textContent: r.count }))),
+    rows.length > 5 ? el('tr', {}, el('td', { className: 'sub', textContent: `+${rows.length - 5} more ${noun}` }), el('td')) : null));
+}
+
+function activitySection() {
+  const st = rollStats(rollLog);
+  const items = [sectionHead('Your activity', 'Rolls you\'ve developed and saved to your log.')];
+  if (!st.total) {
+    items.push(el('div', { className: 'card' }, el('p', { className: 'hint', textContent: 'Nothing logged yet. When you finish developing, tap "Save to roll log" and your counts show up here.' })));
+    return items;
+  }
+  items.push(el('div', { className: 'card activity' },
+    el('div', { className: 'stats' },
+      statTile(st.last7, 'last 7 days'), statTile(st.last30, 'last 30 days'),
+      statTile(st.year, `in ${new Date().getFullYear()}`), statTile(st.total, 'all time')),
+    weekChart(st.weeks),
+    st.last30
+      ? el('div', { className: 'count-tables' },
+        el('p', { className: 'chart-head' }, el('b', { textContent: 'Last 30 days' })),
+        countTable('Film', st.films30, 'films'),
+        countTable('Chemistry', st.kits30, 'kits'))
+      : el('p', { className: 'hint', textContent: 'No rolls in the last 30 days.' })));
+  return items;
+}
+
 function renderHome() {
   const entries = Object.entries(state.batches).filter(([id, b]) => KITS[id] && b && KITS[id].mixes[b.mixKey]);
   const rank = ([id, b]) => (b.rolls >= KITS[id].mixes[b.mixKey].rolls ? 1 : 0);
   entries.sort((a, b) => rank(a) - rank(b) || b[1].mixedOn.localeCompare(a[1].mixedOn));
+  const active = entries.find((e) => rank(e) === 0);
+  const isNew = !entries.length && !rollLog.length;
 
-  const items = [el('h2', { className: 'section-title', textContent: 'Your chemistry' })];
+  const items = [introCard(isNew), nextUpCard(active)];
+  if (!isNew) items.push(...activitySection());
+
+  items.push(sectionHead('Chemistry in use', 'Each batch you\'ve mixed: rolls developed, rolls left, and when it expires.'));
   if (entries.length) {
     items.push(...entries.map(([id, b]) => chemCard(KITS[id], b)));
   } else {
@@ -1549,18 +1677,20 @@ function renderHome() {
       el('p', { textContent: 'No chemistry mixed yet. Pick your kit at the top, then mix a batch.' }), mixBtn));
   }
 
-  const recent = sortedLog().slice(0, 3);
-  const all = el('button', { className: 'btn small', textContent: 'All rolls' });
-  all.addEventListener('click', () => showTab('rolls'));
-  items.push(el('h2', { className: 'section-title', textContent: 'Recent rolls' }),
-    el('div', { className: 'card' },
-      recent.length
-        ? el('ul', { className: 'recent' }, ...recent.map((e) => el('li', {},
-          el('b', { textContent: e.film.name }),
-          el('span', { className: 'hint', textContent: ` ${e.format ? `${e.format} · ` : ''}${fmtDate(e.date)} · ${e.kitName}` }))))
-        : el('p', { className: 'hint', textContent: 'No rolls logged yet.' }),
-      el('div', { className: 'btn-row' }, el('span', { className: 'hint', textContent: `${rollLog.length} roll${rollLog.length === 1 ? '' : 's'} in your log` }), all)));
-  $('#tab-home').replaceChildren(...items);
+  if (!isNew) {
+    const recent = sortedLog().slice(0, 3);
+    const all = el('button', { className: 'btn small', textContent: 'All rolls' });
+    all.addEventListener('click', () => showTab('rolls'));
+    items.push(sectionHead('Recent rolls', 'The last rolls you saved, newest first.'),
+      el('div', { className: 'card' },
+        recent.length
+          ? el('ul', { className: 'recent' }, ...recent.map((e) => el('li', {},
+            el('b', { textContent: e.film.name }),
+            el('span', { className: 'hint', textContent: ` ${e.format ? `${e.format} · ` : ''}${fmtDate(e.date)} · ${e.kitName}` }))))
+          : el('p', { className: 'hint', textContent: 'No rolls logged yet.' }),
+        el('div', { className: 'btn-row' }, el('span', { className: 'hint', textContent: `${rollLog.length} roll${rollLog.length === 1 ? '' : 's'} in your log` }), all)));
+  }
+  $('#tab-home').replaceChildren(...items.filter(Boolean));
 }
 
 // ---------- Settings ----------
