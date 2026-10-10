@@ -406,6 +406,7 @@ const df96 = {
   maxRollsPerTank: 2,
   rotary: false,
   defaultMix: '18oz',
+  snipTestAfterDays: 14,
   mixes: {
     '18oz': {
       label: '18 oz (532 ml)', rolls: 8, portion: 1, perRoll: 30,
@@ -536,6 +537,7 @@ const cs6 = {
   rotary: true,
   needsTankVolume: true,
   defaultMix: 'd6',
+  snipTestAfterDays: 7,
   mixes: {
     d6: {
       label: 'D6 DaylightChrome kit', rolls: 16, portion: 1,
@@ -702,6 +704,7 @@ const kodake6 = {
   maxRollsPerTank: 4,
   rotary: false,
   defaultMix: '1000',
+  snipTestAfterDays: 5,
   mixes: {
     350: { label: '350 ml', rolls: 1, portion: 0.07, baths: kodakBaths(150, [70, 14, 70, 24.8, 35, 182, 35, 3.5], 350) },
     500: { label: '500 ml', rolls: 2, portion: 0.1, baths: kodakBaths(230, [100, 20, 100, 35.5, 50, 260, 50, 5], 500) },

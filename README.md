@@ -42,6 +42,12 @@ agitation method and push/pull.
   - Search, filter, edit or delete entries, and add past rolls by hand.
   - Attach photos from each roll and view them full screen to see how that development turned out.
   - Export it as a CSV spreadsheet or a backup file (photos included), and import the backup on another device.
+- **Notifications** (bell, next to the title): a badge counts what needs attention, most urgent
+  first: chemistry nearing or past its use-by date, batches running low or used up, leftover
+  concentrate about to expire, a finished roll that wasn't saved, snip-test reminders for idle stored
+  chemistry, and backup reminders. Each has a shortcut to deal with it, and can be dismissed (it comes
+  back if things get worse). Set the warning window, turn reminders off, or show the count on the
+  home-screen icon in Settings.
 - **Guide** (book, top right): processing notes, keeping times, troubleshooting and safety notes for the selected kit.
 - **Settings** (gear, top right): choose °C or °F and ml or fl oz independently; turn the end-of-step
   alarm, agitation beeps and floating timer on or off; keep the screen awake while developing, always,

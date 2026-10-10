@@ -235,3 +235,110 @@ export function rollStats(entries, now = new Date()) {
     kits30: tally(last30, (e) => e.kitName),
   };
 }
+
+// ---------- Notifications ----------
+
+// Everything worth a heads-up, worked out fresh from the app state each time
+// (nothing is stored except which ones you dismissed). Each id changes when
+// the situation gets worse, so a dismissed warning comes back as critical.
+// levels: 'critical' (act now), 'warning' (soon), 'info' (good practice).
+// action.go is a tab name; action.kitId switches to that kit first.
+export function buildNotifications({
+  kits, batches = {}, kitMeta = {}, log = [], run = null, lastBackup = null,
+  prefs = {}, now = new Date(),
+}) {
+  const lead = prefs.leadDays ?? 7;
+  const out = [];
+  const add = (n) => out.push(n);
+  const dateStr = (d) => new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  const inDays = (n) => (n === 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n} days`);
+
+  if (run?.done) {
+    add({ id: `run:${run.kitId}:${run.firstRoll}`, level: 'warning', kind: 'run', kitId: run.kitId,
+      title: 'Finished roll not saved',
+      body: `${run.films || 'Your film'} in ${kits[run.kitId]?.name ?? 'your chemistry'} hasn't been saved to the roll log, so the chemistry count hasn't gone up.`,
+      action: { label: 'Save it', go: 'develop', kitId: run.kitId } });
+  }
+
+  for (const [kitId, b] of Object.entries(batches)) {
+    const kit = kits[kitId];
+    const mix = kit?.mixes[b.mixKey];
+    if (!mix) continue;
+
+    // Use-by dates of the working solutions. One alert per kit, for the soonest.
+    const exp = batchExpiry(kit, b.mixedOn).map((e) => ({ ...e, days: daysUntil(e.date, now) }));
+    const expired = exp.filter((e) => e.days < 0);
+    // Short-lived chemistry (e.g. 1 week) only warns in the last third of its life.
+    const soon = exp.filter((e) => e.days >= 0 && e.days <= Math.min(lead, Math.floor((e.weeks * 7) / 3))).sort((x, y) => x.days - y.days);
+    if (expired.length) {
+      const names = expired.map((e) => e.name.toLowerCase()).join(' and ');
+      add({ id: `exp:${kitId}:${b.mixedOn}:${expired.length}:x`, level: 'critical', kind: 'expiry', kitId,
+        title: `${kit.name}: past its use-by date`,
+        body: `The ${names} expired ${dateStr(expired[0].date)}. Old developer gives thin, off-colour results. Mix a fresh batch, or snip-test it first.`,
+        action: { label: 'Mix fresh', go: 'mix', kitId } });
+    } else if (soon.length) {
+      const e = soon[0];
+      add({ id: `exp:${kitId}:${b.mixedOn}:${e.name}:${e.days <= 2 ? 2 : 'w'}`, level: e.days <= 2 ? 'critical' : 'warning', kind: 'expiry', kitId,
+        title: `${kit.name}: ${e.name.toLowerCase()} expires ${inDays(e.days)}`,
+        body: `Use by ${dateStr(e.date)}. ${Math.max(0, mix.rolls - b.rolls)} roll${mix.rolls - b.rolls === 1 ? '' : 's'} of capacity left. Plan a dev day before then.`,
+        action: { label: 'See batch', go: 'batch', kitId } });
+    }
+
+    // Capacity: used up, or nearly.
+    const left = mix.rolls - b.rolls;
+    const lowAt = Math.max(1, Math.ceil(mix.rolls * 0.2));
+    if (left <= 0) {
+      add({ id: `cap:${kitId}:${b.mixedOn}:0`, level: 'critical', kind: 'capacity', kitId,
+        title: `${kit.name}: chemistry used up`,
+        body: `${b.rolls} of ${mix.rolls} rolls developed. Mix a new batch before your next roll.`,
+        action: { label: 'Mix new batch', go: 'mix', kitId } });
+    } else if (left <= lowAt) {
+      add({ id: `cap:${kitId}:${b.mixedOn}:low`, level: 'warning', kind: 'capacity', kitId,
+        title: `${kit.name}: ${left} roll${left === 1 ? '' : 's'} left`,
+        body: `${b.rolls} of ${mix.rolls} rolls developed. Times are getting longer; have a new kit on hand.`,
+        action: { label: 'See batch', go: 'batch', kitId } });
+    }
+
+    // Stored chemistry that hasn't been used for a while: snip-test it.
+    if (kit.snipTestAfterDays && prefs.snip !== false && left > 0 && !expired.length) {
+      const used = log.filter((e) => e.kitId === kitId && e.date.slice(0, 10) >= b.mixedOn).map((e) => e.date.slice(0, 10)).sort().at(-1);
+      const last = used ?? b.mixedOn;
+      const idle = -daysUntil(last, now);
+      if (idle >= kit.snipTestAfterDays) {
+        add({ id: `snip:${kitId}:${last}`, level: 'info', kind: 'snip', kitId,
+          title: `${kit.name}: snip-test before your next roll`,
+          body: `It's been ${idle} days since this chemistry was ${used ? 'last used' : 'mixed'}. Process a light-struck leader snip first: it should come out ${kit.process === 'E-6' ? 'clear' : 'opaque black'}.`,
+          action: { label: 'How to', go: 'guide', kitId } });
+      }
+    }
+  }
+
+  // Leftover concentrate from a part-used kit.
+  for (const [kitId, m] of Object.entries(kitMeta)) {
+    const kit = kits[kitId];
+    const weeks = kit?.keeping?.leftoverConcentrateWeeks;
+    if (!weeks || !m.openedOn || !(m.portionUsed > 0 && m.portionUsed < 1)) continue;
+    const date = addWeeks(m.openedOn, weeks);
+    const days = daysUntil(date, now);
+    if (days > lead) continue;
+    add({ id: `conc:${kitId}:${m.openedOn}:${days < 0 ? 'x' : 'w'}`, level: days < 0 ? 'critical' : 'warning', kind: 'concentrate', kitId,
+      title: days < 0 ? `${kit.name}: leftover concentrate expired` : `${kit.name}: use the leftover concentrate ${inDays(days)}`,
+      body: days < 0 ? `It was good until ${dateStr(date)}.` : `Opened concentrate keeps until ${dateStr(date)}. Mix the rest before then.`,
+      action: { label: 'Mix it', go: 'mix', kitId } });
+  }
+
+  // Backup reminder: the roll log only lives on this phone.
+  if (prefs.backup !== false) {
+    const since = lastBackup ? log.filter((e) => e.date > lastBackup).length : log.length;
+    const age = lastBackup ? -daysUntil(lastBackup, now) : Infinity;
+    if (since >= 5 && age >= 30) {
+      add({ id: `backup:${lastBackup ?? 'never'}`, level: 'info', kind: 'backup',
+        title: lastBackup ? `${since} rolls since your last backup` : 'Back up your roll log',
+        body: `Your roll log and photos are stored only on this device. ${lastBackup ? `Last backup: ${dateStr(lastBackup)}.` : 'Save a backup file somewhere safe, like iCloud Drive.'}`,
+        action: { label: 'Back up', go: 'rolls', backup: true } });
+    }
+  }
+
+  const rank = { critical: 0, warning: 1, info: 2 };
+  return out.sort((a, b) => rank[a.level] - rank[b.level]);
+}

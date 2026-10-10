@@ -32,9 +32,29 @@
     <div class="mini-progress" aria-hidden="true"><div id="mini-fill"></div></div>
   </div>
 
+  <div class="notif-backdrop" id="notif-backdrop" hidden></div>
+  <div class="notif-panel" id="notif-panel" role="dialog" aria-label="Notifications" hidden>
+    <div class="notif-head">
+      <b>Notifications</b>
+      <button type="button" class="link-btn" id="notif-clear">Dismiss all</button>
+    </div>
+    <ul class="notif-list" id="notif-list"></ul>
+    <details class="notif-dismissed" id="notif-dismissed" hidden>
+      <summary></summary>
+      <ul class="notif-list" id="notif-dismissed-list"></ul>
+    </details>
+    <button type="button" class="link-btn notif-settings" id="notif-settings">Notification settings</button>
+  </div>
+
   <header class="top">
     <div class="top-row">
-      <h1>DevApp</h1>
+      <div class="head-left">
+        <h1>DevApp</h1>
+        <button type="button" class="icon-btn bell-btn" id="bell" aria-label="Notifications" aria-haspopup="dialog" aria-expanded="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 10a6 6 0 0 1 12 0c0 4.5 1.5 6 2.2 7H3.8C4.5 16 6 14.5 6 10z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/></svg>
+          <span class="bell-badge" id="bell-badge" hidden></span>
+        </button>
+      </div>
       <div class="head-actions">
         <button type="button" class="icon-btn guide-btn" data-go="guide" aria-label="Guide">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5.5c3-1.5 6-1.5 9 .5 3-2 6-2 9-.5V19c-3-1.5-6-1.5-9 .5-3-2-6-2-9-.5z"/><path d="M12 6v13.5"/></svg>
@@ -267,6 +287,25 @@
         <label class="setting switch-row">
           <div><b>Floating timer</b><span class="hint">Show the running timer at the top of other pages</span></div>
           <input type="checkbox" class="switch" id="set-mini">
+        </label>
+      </div>
+      <div class="card" id="set-notif-card">
+        <h2>Notifications</h2>
+        <div class="setting stack">
+          <div><b>Warn before chemistry expires</b><span class="hint">Short-lived chemistry warns in the last third of its life</span></div>
+          <div class="seg" id="set-lead" role="radiogroup" aria-label="Days of warning"></div>
+        </div>
+        <label class="setting switch-row">
+          <div><b>Snip-test reminders</b><span class="hint">For stored chemistry that hasn't been used for a while (Df96, Cs6, Kodak E-6)</span></div>
+          <input type="checkbox" class="switch" id="set-snip">
+        </label>
+        <label class="setting switch-row">
+          <div><b>Backup reminders</b><span class="hint">After 5+ new rolls and 30 days without a backup</span></div>
+          <input type="checkbox" class="switch" id="set-backup-remind">
+        </label>
+        <label class="setting switch-row" id="set-appbadge-row">
+          <div><b>Count on the app icon</b><span class="hint" id="set-appbadge-hint">Shows the number on DevApp's home-screen icon</span></div>
+          <input type="checkbox" class="switch" id="set-appbadge">
         </label>
       </div>
       <div class="card">

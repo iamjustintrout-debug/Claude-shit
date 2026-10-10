@@ -3,7 +3,7 @@ import { FILM_FORMATS, filmGroups, filmLabel, findFilm } from './films.js';
 import { putPhoto, getPhoto, deletePhoto, newPhotoId, processImage, blobToDataURL, dataURLToBlob } from './photos.js';
 import {
   buildProgram, agitationCues, formatDuration, fmtTemp, fmtTol, fmtVol, mlToFlOz, ML_PER_FL_OZ,
-  mixChecklist, totalWater, addWeeks, daysUntil, batchExpiry,
+  mixChecklist, totalWater, addWeeks, daysUntil, batchExpiry, buildNotifications,
   makeLogEntries, logToCSV, sanitizeLog, settingText, rollStats,
 } from './logic.js';
 
@@ -28,7 +28,10 @@ const DEFAULT_STATE = {
   prefs: {
     mixKey: {}, opts: {}, rotary: false, tankMl: 500, agit: 'kit', film: {}, format: '35mm',
     alarm: true, beeps: true, miniTimer: true, awake: 'dev', // awake: 'off' | 'dev' | 'always'
+    notifLead: 7, snipRemind: true, backupRemind: true, appBadge: false,
   },
+  dismissed: [], // notification ids you've dismissed
+  lastBackup: null, // ISO time of the last full backup
 };
 
 // v1 only knew the C-TEC kit and kept its batch at the top level.
@@ -127,6 +130,7 @@ function renderHeader() {
   }
   if (ids.length) sel.value = state.kitId;
   sel.disabled = !!run || !ids.length;
+  renderBell();
   $('.kit-pick').firstChild.textContent = onBatch ? 'Mixed chemistry' : 'Your chemistry kit';
   const general = activeTab === 'home' || activeTab === 'rolls' || activeTab === 'settings';
   $('#kit-banner').hidden = kit().verified || !!run || general;
@@ -837,6 +841,7 @@ function finishRun() {
   $('#done-notes').value = '';
   $('#done-log').textContent = `Save to roll log (${total} of ${kit().mixes[mixKey].rolls} used)`;
   keepAwake();
+  renderBell();
 }
 
 function endRun() {
@@ -1545,6 +1550,9 @@ $('#rolls-json').addEventListener('click', async () => {
     const rec = await getPhoto(id).catch(() => null);
     if (rec) photos[id] = { full: await blobToDataURL(rec.full), thumb: await blobToDataURL(rec.thumb), w: rec.w, h: rec.h, added: rec.added };
   }
+  state.lastBackup = new Date().toISOString();
+  save();
+  renderBell();
   download(`devapp-backup-${today()}.json`,
     JSON.stringify({ app: 'DevApp', version: 2, rolls: rollLog, customFilms: state.customFilms, photos }), 'application/json');
 });
@@ -1841,6 +1849,16 @@ function renderSettings() {
   segmented($('#set-vol'), ['ml', 'oz'], state.volUnit, (u) => (u === 'ml' ? 'ml' : 'fl oz'), (u) => setUnits(null, u),
     (u) => (u === 'ml' ? 'Millilitres' : 'US fluid ounces'));
   $('#set-example').textContent = `Example: mix ${V(200)} of developer, process at ${T({ c: 38, f: 100 })}.`;
+  segmented($('#set-lead'), [3, 7, 14], state.prefs.notifLead, (d) => `${d} days`, (d) => {
+    state.prefs.notifLead = d;
+    save();
+    renderSettings();
+    renderBell();
+  });
+  $('#set-snip').checked = state.prefs.snipRemind;
+  $('#set-backup-remind').checked = state.prefs.backupRemind;
+  $('#set-appbadge-row').hidden = !('setAppBadge' in navigator);
+  $('#set-appbadge').checked = state.prefs.appBadge;
 }
 for (const [id, key] of [['#set-alarm', 'alarm'], ['#set-beeps', 'beeps'], ['#set-mini', 'miniTimer']]) {
   $(id).addEventListener('change', (e) => {
@@ -1850,6 +1868,24 @@ for (const [id, key] of [['#set-alarm', 'alarm'], ['#set-beeps', 'beeps'], ['#se
     updateMini();
   });
 }
+for (const [id, key] of [['#set-snip', 'snipRemind'], ['#set-backup-remind', 'backupRemind']]) {
+  $(id).addEventListener('change', (e) => {
+    state.prefs[key] = e.currentTarget.checked;
+    save();
+    renderBell();
+  });
+}
+$('#set-appbadge').addEventListener('change', async (e) => {
+  const on = e.currentTarget.checked;
+  // iOS only shows icon badges for home-screen apps with notification permission.
+  if (on && 'Notification' in window && Notification.permission === 'default') {
+    try { await Notification.requestPermission(); } catch { /* ignore */ }
+  }
+  state.prefs.appBadge = on;
+  save();
+  if (!on) navigator.clearAppBadge?.().catch(() => {});
+  renderBell();
+});
 $('#set-test-alarm').addEventListener('click', () => {
   unlockAudio();
   if (!state.prefs.alarm) return alert('The alarm is turned off. Switch it on to hear it.');
@@ -1866,6 +1902,117 @@ $('.gear-btn').addEventListener('click', (e) => {
   b.classList.add('spin');
 });
 $('.gear-btn').addEventListener('animationend', (e) => e.currentTarget.classList.remove('spin'));
+
+// ---------- Notifications ----------
+// A bell next to the title. Its badge counts active notifications you
+// haven't dismissed; the panel lists them with a shortcut to deal with each.
+
+const NOTIF_ICONS = {
+  expiry: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2.5h6"/>',
+  capacity: '<path d="M9 3h6M10 3v5l-5 9.5A2.3 2.3 0 0 0 7 21h10a2.3 2.3 0 0 0 2-3.5L14 8V3"/><path d="M7.5 15h9"/>',
+  concentrate: '<path d="M9 3h6M10 3v5l-5 9.5A2.3 2.3 0 0 0 7 21h10a2.3 2.3 0 0 0 2-3.5L14 8V3"/>',
+  snip: '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/>',
+  backup: '<path d="M7 18a4.5 4.5 0 0 1-.6-9A6 6 0 0 1 18 8a4 4 0 0 1 0 8h-1"/><path d="M12 12v8M9 15l3-3 3 3"/>',
+  run: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 3v18M16 3v18M4 8h4M4 13h4M16 8h4M16 13h4"/>',
+};
+
+function currentNotifications() {
+  const all = buildNotifications({
+    kits: KITS, batches: state.batches, kitMeta: state.kitMeta, log: rollLog, lastBackup: state.lastBackup,
+    run: run?.done ? { done: true, kitId: state.kitId, firstRoll: run.opts.firstRoll, films: run.films.map((f) => f.name).join(' + ') } : null,
+    prefs: { leadDays: state.prefs.notifLead, snip: state.prefs.snipRemind, backup: state.prefs.backupRemind },
+  });
+  // Forget dismissals for situations that have cleared, so the list stays small.
+  const ids = new Set(all.map((n) => n.id));
+  const kept = state.dismissed.filter((id) => ids.has(id));
+  if (kept.length !== state.dismissed.length) { state.dismissed = kept; save(); }
+  const dismissed = new Set(kept);
+  return { active: all.filter((n) => !dismissed.has(n.id)), dismissed: all.filter((n) => dismissed.has(n.id)) };
+}
+
+let lastBadge = 0;
+function renderBell() {
+  const { active } = currentNotifications();
+  const n = active.length;
+  const top = active[0]?.level ?? '';
+  const badge = $('#bell-badge');
+  badge.hidden = !n;
+  badge.textContent = n > 9 ? '9+' : String(n);
+  badge.className = `bell-badge ${top}`;
+  if (n > lastBadge) { void badge.offsetWidth; badge.classList.add('pop'); }
+  lastBadge = n;
+  const bell = $('#bell');
+  bell.classList.toggle('has', n > 0);
+  bell.classList.toggle('critical', top === 'critical');
+  bell.setAttribute('aria-label', n ? `Notifications, ${n} new` : 'Notifications');
+  if (state.prefs.appBadge && 'setAppBadge' in navigator) {
+    (n ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {});
+  }
+  if (!$('#notif-panel').hidden) renderNotifPanel();
+}
+
+function notifItem(nt, dismissed) {
+  const go = el('button', { type: 'button', className: 'notif-go', textContent: nt.action?.label ?? 'Open' });
+  go.addEventListener('click', () => notifAction(nt));
+  const x = el('button', { type: 'button', className: 'notif-x', textContent: dismissed ? '↺' : '×' });
+  x.setAttribute('aria-label', dismissed ? 'Restore' : 'Dismiss');
+  x.addEventListener('click', () => {
+    state.dismissed = dismissed ? state.dismissed.filter((id) => id !== nt.id) : [...state.dismissed, nt.id];
+    save();
+    renderBell();
+  });
+  const icon = el('span', { className: 'notif-icon' });
+  icon.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${NOTIF_ICONS[nt.kind] ?? ''}</svg>`;
+  return el('li', { className: `notif ${nt.level}` },
+    icon, el('span', { className: 'notif-title', textContent: nt.title }), x,
+    el('span', { className: 'notif-body', textContent: nt.body }),
+    nt.action ? el('div', { className: 'notif-actions' }, go) : null);
+}
+
+function renderNotifPanel() {
+  const { active, dismissed } = currentNotifications();
+  $('#notif-list').replaceChildren(...(active.length ? active.map((n) => notifItem(n, false))
+    : [el('li', { className: 'notif-empty' }, el('b', { textContent: 'All clear' }),
+      'Expiring chemistry, low capacity, unsaved rolls and backup reminders show up here.')]));
+  $('#notif-clear').disabled = !active.length;
+  const d = $('#notif-dismissed');
+  d.hidden = !dismissed.length;
+  d.querySelector('summary').textContent = `Dismissed (${dismissed.length})`;
+  $('#notif-dismissed-list').replaceChildren(...dismissed.map((n) => notifItem(n, true)));
+}
+
+function setNotifPanel(open) {
+  $('#notif-panel').hidden = !open;
+  $('#notif-backdrop').hidden = !open;
+  $('#bell').setAttribute('aria-expanded', String(open));
+  if (open) renderNotifPanel();
+}
+
+function notifAction(nt) {
+  setNotifPanel(false);
+  const a = nt.action ?? {};
+  if (a.kitId && a.kitId !== state.kitId && !run) selectKit(a.kitId);
+  showTab(a.go ?? 'home');
+  // After this tap finishes, or the menu's outside-tap handler closes it again.
+  if (a.backup) setTimeout(() => setBackupMenu(true), 0);
+}
+
+$('#bell').addEventListener('click', () => setNotifPanel($('#notif-panel').hidden));
+$('#notif-backdrop').addEventListener('click', () => setNotifPanel(false));
+$('#notif-clear').addEventListener('click', () => {
+  state.dismissed = [...new Set([...state.dismissed, ...currentNotifications().active.map((n) => n.id)])];
+  save();
+  renderBell();
+});
+$('#notif-settings').addEventListener('click', () => {
+  setNotifPanel(false);
+  showTab('settings');
+  $('#set-notif-card').scrollIntoView({ block: 'start' });
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#notif-panel').hidden) setNotifPanel(false); });
+// Dates move on while the app sits open or in the background.
+document.addEventListener('visibilitychange', () => { if (!document.hidden) renderBell(); });
+setInterval(renderBell, 60 * 60 * 1000);
 
 // ---------- Guide ----------
 
