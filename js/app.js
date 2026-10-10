@@ -79,7 +79,7 @@ const fmtDate = (d) => new Date(d).toLocaleDateString(undefined, { day: 'numeric
 const mixKeys = () => Object.keys(kit().mixes);
 const currentMixKey = () => {
   const k = state.prefs.mixKey[state.kitId];
-  return kit().mixes[k] ? k : mixKeys().at(-1);
+  return kit().mixes[k] ? k : (kit().defaultMix ?? mixKeys().at(-1));
 };
 const kitOpts = (k = kit()) => {
   const saved = state.prefs.opts[k.id] ?? {};
@@ -359,8 +359,10 @@ function devOptions() {
 function renderOptions() {
   const k = kit();
   const opts = kitOpts();
-  $('#dev-options').replaceChildren(...k.options.filter((o) => !o.when || o.when(opts)).map((o) => {
-    const seg = el('div', { className: 'seg' });
+  // Some options depend on which mix you made (e.g. Cs6's first developer).
+  const ctx = { ...opts, mixKey: dev.mix.value };
+  $('#dev-options').replaceChildren(...k.options.filter((o) => !o.when || o.when(ctx)).map((o) => {
+    const seg = el('div', { className: o.choices.length > 4 ? 'seg many' : 'seg' });
     seg.setAttribute('role', 'radiogroup');
     const byVal = Object.fromEntries(o.choices.map((c) => [c.value, c]));
     segmented(seg, o.choices.map((c) => c.value), opts[o.id], (v) => choiceLabel(byVal[v].label), (v) => {
@@ -389,7 +391,10 @@ function stepSub(s) {
 
 function noteText(n) {
   if (typeof n === 'string') return n;
-  if (n.d9) return `D9 for your tank (${n.label}): ${V(n.stock)} stock + ${V(n.water)} water. One-shot: discard after use.`;
+  if (n.d9) {
+    const amount = n.water ? `${V(n.stock)} stock + ${V(n.water)} water` : `${V(n.stock)} of undiluted stock`;
+    return `${n.name ?? 'D9'} for your tank (${n.label}): ${amount}. One-shot: discard after use.`;
+  }
   return '';
 }
 
@@ -725,6 +730,8 @@ function startTimer() {
   if (!resuming) {
     const a = run.agit;
     if (a?.continuous) setCue(a.label?.startsWith('Rotate') ? 'Rotate continuously' : 'Agitate continuously');
+    // Initial-only patterns (or none at all) show the sheet's own wording.
+    else if (a && !a.every) setCue(a.label ?? (a.initial ? `Agitate for ${a.initial} s` : ''));
     else if (a?.initial) setCue(`Agitate continuously for ${a.initial} s`);
     else if (a) setCue(`${a.cue ?? 'Agitate'} now, then at each beep`);
     cueBeep(784, 160, 1, 'square', 0.2);
@@ -755,6 +762,9 @@ function tick() {
       run.midShown = true;
       setCue('Stop. Wait for the next beep');
     }
+  } else if (a && !a.continuous && !a.every && a.initial && !run.midShown && elapsed >= a.initial) {
+    run.midShown = true;
+    setCue('Stop agitating. Let it stand');
   }
   if (!run.warned && run.remaining <= 10 && s.sec > 20) {
     run.warned = true;
@@ -1882,6 +1892,10 @@ function renderGuide() {
       el('div', { className: 'trouble' }, el('b', { textContent: sym }),
         el('span', { textContent: `Cause: ${cause}` }), el('span', { textContent: `Fix: ${fix}` }))));
   }
+
+  const safety = k.safety ?? [];
+  $('#guide-safety-kit').hidden = !safety.length;
+  $('#guide-safety-kit').replaceChildren(...safety.map((t) => el('li', { textContent: t })));
 
   $('#guide-source').textContent = k.verified
     ? `Checked against the ${k.source}. Always follow the sheet that came with your kit.`

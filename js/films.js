@@ -1,6 +1,6 @@
-// Colour film catalog for the film picker. `process` groups the list:
+// Film catalog for the film picker. `process` groups the list:
 // C-41 (colour negative), E-6 (slide), ECN-2 (motion picture negative,
-// needs remjet removal). `disc` marks discontinued stocks people still
+// needs remjet removal) and B&W. `disc` marks discontinued stocks people still
 // shoot as expired film. Anything missing can be typed in as "Other".
 
 const f = (process, brand, name, iso, extra = {}) => ({
@@ -62,6 +62,38 @@ export const FILMS = [
   f('ECN-2', 'Kodak', 'Vision3 500T (5219)', 500),
   f('ECN-2', 'Kodak', 'Verita 200D (5206)', 200),
 
+  // ---- B&W negative (from the Df96 film rating chart) ----
+  f('B&W', 'CineStill', 'BwXX', 250),
+  f('B&W', 'Kodak', 'Tri-X 400', 400),
+  f('B&W', 'Kodak', 'T-Max 100', 100),
+  f('B&W', 'Kodak', 'T-Max 400', 400),
+  f('B&W', 'Kodak', 'T-Max P3200', 3200),
+  f('B&W', 'Ilford', 'FP4 Plus', 125),
+  f('B&W', 'Ilford', 'HP5 Plus', 400),
+  f('B&W', 'Ilford', 'Delta 100', 100),
+  f('B&W', 'Ilford', 'Delta 400', 400),
+  f('B&W', 'Ilford', 'Delta 3200', 3200),
+  f('B&W', 'Ilford', 'Pan F Plus', 50),
+  f('B&W', 'JCH', 'Street Pan 400', 400),
+  f('B&W', 'Adox', 'Silvermax 100', 100),
+  f('B&W', 'Adox', 'CHS 100 II', 100),
+  f('B&W', 'Adox', 'CMS 20 II', 20),
+  f('B&W', 'Kentmere', 'Pan 100', 100),
+  f('B&W', 'Kentmere', 'Pan 400', 400),
+  f('B&W', 'Rollei', 'RPX 25', 25),
+  f('B&W', 'Rollei', 'RPX 100', 100),
+  f('B&W', 'Rollei', 'RPX 400', 400),
+  f('B&W', 'Rollei', 'Retro 80S', 80),
+  f('B&W', 'Rollei', 'Retro 400S', 400),
+  f('B&W', 'Foma', 'Retropan 320', 320),
+  f('B&W', 'Foma', 'Fomapan 100', 100),
+  f('B&W', 'Foma', 'Fomapan 200', 200),
+  f('B&W', 'Foma', 'Fomapan 400', 400),
+  f('B&W', 'Bergger', 'Pancro 400', 400),
+  f('B&W', 'Arista', 'EDU Ultra 100', 100),
+  f('B&W', 'Arista', 'EDU Ultra 200', 200),
+  f('B&W', 'Arista', 'EDU Ultra 400', 400),
+
   // ---- Discontinued (expired stock) ----
   f('C-41', 'Fujifilm', 'Pro 400H', 400, { disc: true }),
   f('C-41', 'Fujifilm', 'Superia 200', 200, { disc: true }),
@@ -73,6 +105,7 @@ export const FILMS = [
   f('C-41', 'Kodak', 'Portra 400NC', 400, { disc: true }),
   f('C-41', 'Kodak', 'Max 400', 400, { disc: true }),
   f('C-41', 'Kodak', 'Gold 100', 100, { disc: true }),
+  f('B&W', 'Kodak', 'Plus-X 125', 125, { disc: true }),
   f('C-41', 'AgfaPhoto', 'Vista Plus 200', 200, { disc: true }),
   f('C-41', 'AgfaPhoto', 'Vista Plus 400', 400, { disc: true }),
   f('C-41', 'Lomography', 'Color Negative 200', 200, { disc: true }),
@@ -93,9 +126,9 @@ export const findFilm = (id) => BY_ID[id] ?? null;
 
 // Groups for the picker, the kit's own process first.
 export function filmGroups(process) {
-  const order = ['C-41', 'E-6', 'ECN-2'].sort((a, b) => (b === process) - (a === process));
+  const order = ['C-41', 'E-6', 'ECN-2', 'B&W'].sort((a, b) => (b === process) - (a === process));
   const groups = order.map((p) => ({
-    label: { 'C-41': 'C-41 colour negative', 'E-6': 'E-6 colour slide', 'ECN-2': 'ECN-2 motion picture (remove remjet)' }[p],
+    label: { 'C-41': 'C-41 colour negative', 'E-6': 'E-6 colour slide', 'ECN-2': 'ECN-2 motion picture (remove remjet)', 'B&W': 'Black & white negative' }[p],
     films: FILMS.filter((x) => x.process === p && !x.disc),
   }));
   groups.push({ label: 'Discontinued / expired', films: FILMS.filter((x) => x.disc) });

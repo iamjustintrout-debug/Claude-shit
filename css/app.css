@@ -88,6 +88,8 @@ main { max-width: 640px; margin: 0 auto; padding: 0 16px; }
   font-weight: 600;
 }
 .seg button small { display: block; font-size: 12px; font-weight: 500; opacity: .8; }
+.seg.many { flex-wrap: wrap; }
+.seg.many button { flex: 0 0 calc(25% - 6px); padding: 10px 4px; }
 .seg.small button { padding: 6px 10px; font-size: 13px; flex: none; }
 .seg button[aria-checked="true"] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 

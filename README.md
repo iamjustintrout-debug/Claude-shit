@@ -14,10 +14,16 @@ the whole app follows it:
 | Kit | Process | Source status |
 |---|---|---|
 | C-TEC 41 | C-41 colour negative | Checked against the printed sheet (9/2026) |
-| CineStill Cs41 (liquid quart or powder 1 L) | C-41 colour negative | Compiled from published instructions. Check your sheet |
+| CineStill Cs41 (powder 1 L; liquid pint, quart or gallon) | C-41 colour negative | Checked against the 2026 sheets and safety data sheets |
 | Unicolor C-41 Powder (1 L) | C-41 colour negative | Compiled from published instructions. Check your sheet |
-| CineStill Df96 Monobath | B&W | Compiled from published instructions. Check your sheet |
-| CineStill Cs6 Creative Slide | E-6 slide | Compiled from published instructions. Check your sheet |
+| CineStill Df96 Monobath (18 oz or 1 L) | B&W | Checked against the 18 oz sheet |
+| CineStill Cs6 Creative Slide (D6, T6 or D9) | E-6 slide | Checked against the 2023 sheet |
+| Kodak E-6 Processing Kit (350 ml – 5 L) | E-6 slide | Checked against the kit instructions |
+| JOBO E-6 Kit #9220 (1 L, 1.25 L, 2.5 L) | E-6 slide | Checked against the kit manual |
+
+Kits with a variable-temperature chart (Cs41, Cs6 D6/T6) let you pick the temperature and push/pull, and
+the timer uses the sheet's time and agitation for that combination. Df96 sets the temperature from your
+agitation method and push/pull.
 
 - **Mix:** collapsible, numbered tick-off steps for each bath; a finished bath folds away and the next opens. Amounts that couldn't be confirmed show as *see sheet*
   rather than being guessed.
@@ -31,12 +37,12 @@ the whole app follows it:
     resume or start the next step from it, collapse it to a slim strip, or tap it to jump back.
 - **Batch:** rolls developed and use-by dates, tracked separately for each kit.
 - **Rolls:** a log of every roll you develop.
-  - Records the film (picked from a list of colour C-41, E-6 and ECN-2 stocks, or typed in), format,
+  - Records the film (picked from a list of C-41, E-6, ECN-2 and B&W stocks, or typed in), format,
     chemistry, settings, developer time and temperature, and your notes.
   - Search, filter, edit or delete entries, and add past rolls by hand.
   - Attach photos from each roll and view them full screen to see how that development turned out.
   - Export it as a CSV spreadsheet or a backup file (photos included), and import the backup on another device.
-- **Guide** (book, top right): processing notes, keeping times and troubleshooting for the selected kit.
+- **Guide** (book, top right): processing notes, keeping times, troubleshooting and safety notes for the selected kit.
 - **Settings** (gear, top right): choose °C or °F and ml or fl oz independently; turn the end-of-step
   alarm, agitation beeps and floating timer on or off; keep the screen awake while developing, always,
   or never.

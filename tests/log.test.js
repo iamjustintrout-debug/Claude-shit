@@ -4,11 +4,11 @@ import { KITS } from '../js/kits.js';
 import { FILMS, filmGroups, findFilm, filmLabel } from '../js/films.js';
 import { buildProgram, makeLogEntries, logToCSV, sanitizeLog } from '../js/logic.js';
 
-test('film catalog: unique ids, colour processes only, sensible ISO', () => {
+test('film catalog: unique ids, known processes, sensible ISO', () => {
   const ids = FILMS.map((f) => f.id);
   assert.equal(new Set(ids).size, ids.length);
   for (const f of FILMS) {
-    assert.ok(['C-41', 'E-6', 'ECN-2'].includes(f.process), f.id);
+    assert.ok(['C-41', 'E-6', 'ECN-2', 'B&W'].includes(f.process), f.id);
     assert.ok(f.iso > 0 && f.iso <= 3200, f.id);
   }
   assert.equal(filmLabel(findFilm('kodak-portra-400')), 'Kodak Portra 400');
