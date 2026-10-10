@@ -179,8 +179,8 @@ const CS41_HOT_AGITATION = { initial: 10, every: 30, cue: '4 inversion cycles', 
 const CS41_ROOM_TO_HOT = R([24, 40], [75, 105]);
 const CS41_MIX_WATER = T(38, 100);
 
-const cs41Liquid = (label, rolls, reuse, d, b, s) => ({
-  label, rolls, portion: 1, reuse,
+const cs41Liquid = (label, short, sub, rolls, reuse, d, b, s) => ({
+  label, short, sub, rolls, portion: 1, reuse,
   baths: [
     { name: 'Developer', water: { start: d[0], temp: T(49, 120) },
       parts: [{ name: 'Developer Part A', ml: d[1] }, { name: 'Developer Part B', ml: d[2] }, { name: 'Developer Part C', ml: d[3] }],
@@ -206,7 +206,7 @@ const cs41 = {
   defaultMix: 'liquid-qt',
   mixes: {
     'powder-1l': {
-      label: 'Powder, 1 L', rolls: 24, portion: 1, reuse: 0.02,
+      label: 'Powder, 1 L', short: 'Powder', sub: '1 L', rolls: 24, portion: 1, reuse: 0.02,
       baths: [
         { name: 'Color Developer', water: { start: [600, 700], temp: CS41_MIX_WATER }, parts: [packet('Color Developer')], final: 1000,
           notes: ['Use water at about 100°F (38°C) or warmer, for the developer and for topping up.'] },
@@ -222,9 +222,9 @@ const cs41 = {
           ] },
       ],
     },
-    'liquid-pt': cs41Liquid('Liquid, 1 pint (473 ml)', 12, 0.04, [296, 118, 30, 30], [266, 118, 30, 59], [444, 30]),
-    'liquid-qt': cs41Liquid('Liquid, 1 quart (946 ml)', 24, 0.02, [591, 237, 59, 59], [532, 237, 59, 118], [887, 59]),
-    'liquid-gal': cs41Liquid('Liquid, 1 gallon (3.78 L)', 96, 0.005, [2370, 946, 237, 237], [2130, 946, 236, 473], [3550, 237]),
+    'liquid-pt': cs41Liquid('Liquid, 1 pint (473 ml)', 'Pint', '473 ml', 12, 0.04, [296, 118, 30, 30], [266, 118, 30, 59], [444, 30]),
+    'liquid-qt': cs41Liquid('Liquid, 1 quart (946 ml)', 'Quart', '946 ml', 24, 0.02, [591, 237, 59, 59], [532, 237, 59, 118], [887, 59]),
+    'liquid-gal': cs41Liquid('Liquid, 1 gallon (3.78 L)', 'Gallon', '3.78 L', 96, 0.005, [2370, 946, 237, 237], [2130, 946, 236, 473], [3550, 237]),
   },
   mixHint: (key) => ({
     'powder-1l': 'One-shot: 8 rolls of 135-36 or 120 per litre. Reused, up to 24 rolls: developer time +2% per roll already processed.',
@@ -409,7 +409,7 @@ const df96 = {
   snipTestAfterDays: 14,
   mixes: {
     '18oz': {
-      label: '18 oz (532 ml)', rolls: 8, portion: 1, perRoll: 30,
+      label: '18 oz (532 ml)', short: '18 oz', sub: '532 ml', rolls: 8, portion: 1, perRoll: 30,
       baths: [{ name: 'Df96', water: null, parts: [], final: null,
         notes: ['Ready to use. No mixing needed. Pour it back into its bottle after each use.'] }],
     },
@@ -540,17 +540,17 @@ const cs6 = {
   snipTestAfterDays: 7,
   mixes: {
     d6: {
-      label: 'D6 DaylightChrome kit', rolls: 16, portion: 1,
+      label: 'D6 DaylightChrome kit', short: 'D6', sub: 'Daylight', rolls: 16, portion: 1,
       baths: cs6Baths({ name: 'D6 DaylightChrome 1st Developer (stock)', water: { start: 470, temp: R([29, 60], [85, 140]) },
         parts: [bottle('D6 concentrate (whole bottle)')], final: 1000, notes: [...CS6_FD_NOTES, 'Neutral-tone 5500K slides. The concentrate drops the temperature to about 104°F (40°C).'] }),
     },
     t6: {
-      label: 'T6 TungstenChrome kit', rolls: 16, portion: 1,
+      label: 'T6 TungstenChrome kit', short: 'T6', sub: 'Tungsten', rolls: 16, portion: 1,
       baths: cs6Baths({ name: 'T6 TungstenChrome 1st Developer (stock)', water: { start: [600, 700], temp: R([29, 44], [85, 111]) },
         parts: [packet('T6 powder')], final: 1000, notes: [...CS6_FD_NOTES, 'Cool-tone 3200K slides, for tungsten-balanced film such as E100T. The powder drops the temperature to about 104°F (40°C).'] }),
     },
     '1l': {
-      label: 'D9 DynamicChrome kit', rolls: 16, portion: 1,
+      label: 'D9 DynamicChrome kit', short: 'D9', sub: 'Dynamic', rolls: 16, portion: 1,
       baths: cs6Baths({ name: 'D9 DynamicChrome 1st Developer (stock)', water: { start: [600, 700], temp: R([29, 44], [85, 111]) },
         parts: [packet('D9 powder')], final: 1000, notes: [...CS6_FD_NOTES, 'Warm-tone dynamic slides. The powder drops the temperature to about 104°F (40°C).'] }),
     },
@@ -710,7 +710,7 @@ const kodake6 = {
     500: { label: '500 ml', rolls: 2, portion: 0.1, baths: kodakBaths(230, [100, 20, 100, 35.5, 50, 260, 50, 5], 500) },
     1000: { label: '1 L', rolls: 4, portion: 0.2, baths: kodakBaths(460, [200, 40, 200, 71, 100, 520, 100, 10], 1000) },
     2000: { label: '2 L', rolls: 8, portion: 0.4, baths: kodakBaths(920, [400, 80, 400, 142, 200, 1040, 200, 20], 2000) },
-    5000: { label: '5 L (whole kit)', rolls: 20, portion: 1, baths: kodakBaths(2000, [1000, 200, 1000, 355, 500, 2600, 500, 50], 5000) },
+    5000: { label: '5 L (whole kit)', short: '5 L', sub: 'whole kit', rolls: 20, portion: 1, baths: kodakBaths(2000, [1000, 200, 1000, 355, 500, 2600, 500, 50], 5000) },
   },
   mixHint: (key) => `One-shot chemistry: use each bath once and discard it. Roll count assumes about 250 ml of each bath per 35 mm roll (the sheet gives no figure), so ${({ 350: 'this mix does 1 roll', 500: 'this does about 2 rolls', 1000: 'this does about 4 rolls', 2000: 'this does about 8 rolls', 5000: 'the whole kit does about 20 rolls' })[key] ?? ''}. Use your tank's fill volume.`,
   mixNotes: [
@@ -835,8 +835,8 @@ const joboe6 = {
   defaultMix: '1000',
   mixes: {
     1000: { label: '1 L', rolls: 16, portion: 0.4, baths: joboBaths(1) },
-    1250: { label: '1.25 L (half kit)', rolls: 20, portion: 0.5, baths: joboBaths(1.25) },
-    2500: { label: '2.5 L (whole kit)', rolls: 40, portion: 1, baths: joboBaths(2.5) },
+    1250: { label: '1.25 L (half kit)', short: '1.25 L', sub: 'half kit', rolls: 20, portion: 0.5, baths: joboBaths(1.25) },
+    2500: { label: '2.5 L (whole kit)', short: '2.5 L', sub: 'whole kit', rolls: 40, portion: 1, baths: joboBaths(2.5) },
   },
   mixHint: (key) => ({
     1000: '8 rolls of 135-36 or 120 one-shot, or up to 16 reused with longer times.',

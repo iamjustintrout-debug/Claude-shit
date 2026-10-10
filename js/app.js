@@ -282,9 +282,10 @@ function bathCard(bath, key, { number, nested = false, openByDefault = false } =
 function renderMix() {
   const k = kit();
   const key = currentMixKey();
-  segmented($('#mix-size'), mixKeys(), key, (v) => k.mixes[v].label, (v) => {
+  $('#mix-size').classList.toggle('many', mixKeys().length > 4);
+  segmented($('#mix-size'), mixKeys(), key, (v) => k.mixes[v].short ?? k.mixes[v].label, (v) => {
     state.prefs.mixKey[state.kitId] = v; save(); renderMix();
-  });
+  }, (v) => k.mixes[v].sub);
   $('#mix-size-hint').textContent = k.mixHint?.(key) ?? '';
   const baths = k.mixes[key].baths;
   const bathKey = (i) => `${state.kitId}|${key}|${i}`;

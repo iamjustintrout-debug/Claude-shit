@@ -79,6 +79,8 @@ main { max-width: 640px; margin: 0 auto; padding: 0 16px; }
 .seg { display: flex; gap: 8px; }
 .seg button {
   flex: 1;
+  min-width: 0; /* let long labels wrap instead of pushing past the card */
+  overflow-wrap: anywhere;
   padding: 12px 8px;
   border-radius: 10px;
   border: 1px solid var(--line);
@@ -850,3 +852,4 @@ details.fold[open] > summary { margin-bottom: 8px; }
 .home-stats { margin: 0; }
 .home-stats .stat { background: var(--card); border-color: transparent; }
 #rolls-stats .top-lists { margin-top: 4px; }
+#mix-size.many button { flex: 1 0 calc(33% - 6px); }
