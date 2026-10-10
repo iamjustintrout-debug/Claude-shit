@@ -288,7 +288,7 @@ $('#mix-done').addEventListener('click', () => {
 // ---------- Develop: setup ----------
 
 const dev = {
-  mix: $('#dev-mix'), first: $('#dev-first'), rolls: $('#dev-rolls'), agit: $('#dev-agit'),
+  mix: $('#dev-mix'), used: $('#dev-used-input'), rolls: $('#dev-rolls'), agit: $('#dev-agit'),
   tank: $('#dev-tank'), rotary: $('#dev-rotary'),
 };
 const preStepChecks = {};
@@ -299,7 +299,8 @@ function syncDevFromBatch() {
   dev.rolls.replaceChildren(...Array.from({ length: k.maxRollsPerTank }, (_, i) => el('option', { value: i + 1, textContent: i + 1 })));
   const b = batch();
   dev.mix.value = b?.mixKey ?? currentMixKey();
-  dev.first.value = b ? b.rolls + 1 : 1;
+  dev.used.value = b ? b.rolls : 0;
+  $('#dev-used-editor').hidden = true;
   dev.agit.value = state.prefs.agit;
   dev.rotary.checked = state.prefs.rotary;
   $('#dev-rotary-wrap').hidden = !k.rotary;
@@ -321,7 +322,8 @@ function devOptions() {
   return {
     ...kitOpts(),
     mixKey: dev.mix.value,
-    firstRoll: Number(dev.first.value),
+    // Chemistry weakens with use, so times depend on how many rolls it has already developed.
+    firstRoll: Math.max(0, Math.floor(Number(dev.used.value) || 0)) + 1,
     rolls: Number(dev.rolls.value),
     tankMl: state.prefs.tankMl,
   };
@@ -372,6 +374,20 @@ function currentProgram() {
   return { ...prog, steps: [...pre, ...prog.steps], opts };
 }
 
+function renderUsage() {
+  const used = Math.max(0, Math.floor(Number(dev.used.value) || 0));
+  const cap = kit().mixes[dev.mix.value]?.rolls;
+  const b = batch();
+  $('#dev-used').textContent = used;
+  $('#dev-used-label').textContent = `roll${used === 1 ? '' : 's'} through this chemistry so far`;
+  $('#dev-used-sub').textContent = cap
+    ? `This will be roll #${used + 1} of ${cap}. Developer times lengthen as the chemistry is used.`
+    : `This will be roll #${used + 1}.`;
+  $('#dev-used-help').textContent = b
+    ? 'Counted automatically each time you save a roll. Change it if you developed rolls without logging them; your batch count updates too.'
+    : 'No batch logged for this kit yet, so this only affects this run. Log your mix on the Mix tab to have it counted automatically.';
+}
+
 function renderProgram() {
   renderOptions();
   const prog = currentProgram();
@@ -397,6 +413,8 @@ function renderProgram() {
   }));
   $('#dev-notes').replaceChildren(...(prog.notes ?? []).map((n) => el('li', { textContent: noteText(n) })));
 
+  renderUsage();
+
   // Collapsed-program summary: step count, total time, and the developer step.
   const timed = (prog.steps ?? []).filter((x) => !x.manual);
   const total = timed.reduce((a, x) => a + x.sec, 0);
@@ -406,7 +424,19 @@ function renderProgram() {
 }
 
 dev.mix.addEventListener('input', renderProgram);
-dev.first.addEventListener('input', renderProgram);
+dev.used.addEventListener('input', () => {
+  // Correcting the count updates the saved batch, so the dashboard and Batch tab agree.
+  const b = batch();
+  const n = Math.max(0, Math.floor(Number(dev.used.value) || 0));
+  if (b && b.mixKey === dev.mix.value) { b.rolls = n; save(); }
+  renderProgram();
+});
+$('#dev-used-edit').addEventListener('click', () => {
+  const ed = $('#dev-used-editor');
+  ed.hidden = !ed.hidden;
+  $('#dev-used-edit').textContent = ed.hidden ? 'Adjust' : 'Done';
+  if (!ed.hidden) dev.used.focus();
+});
 dev.rolls.addEventListener('input', () => { renderDevFilms(); renderProgram(); });
 dev.agit.addEventListener('change', () => { state.prefs.agit = dev.agit.value; save(); renderProgram(); });
 dev.rotary.addEventListener('change', () => { state.prefs.rotary = dev.rotary.checked; save(); renderProgram(); });

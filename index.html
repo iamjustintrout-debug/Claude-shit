@@ -79,12 +79,22 @@
     <section id="tab-develop" class="tab" data-tab="develop" hidden>
       <div id="dev-setup">
         <div id="dev-options"></div>
+        <div class="card usage">
+          <div class="usage-main">
+            <span class="usage-num" id="dev-used">0</span>
+            <span class="usage-text"><b id="dev-used-label">rolls through this chemistry so far</b><small id="dev-used-sub"></small></span>
+            <button type="button" class="btn small ghost" id="dev-used-edit">Adjust</button>
+          </div>
+          <div class="usage-editor" id="dev-used-editor" hidden>
+            <label>Rolls already developed in this chemistry
+              <input type="number" id="dev-used-input" min="0" inputmode="numeric">
+            </label>
+            <p class="hint" id="dev-used-help"></p>
+          </div>
+        </div>
         <div class="card grid2">
           <label>Mix
             <select id="dev-mix"></select>
-          </label>
-          <label>First roll # in this chemistry
-            <input type="number" id="dev-first" min="1" inputmode="numeric">
           </label>
           <label>Rolls in the tank
             <select id="dev-rolls"></select>
