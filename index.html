@@ -316,32 +316,52 @@
 
     <!-- GUIDE -->
     <section id="tab-guide" class="tab" data-tab="guide" hidden>
-      <div class="card">
-        <h2>Processing notes</h2>
-        <ul class="notes" id="guide-process"></ul>
+      <div class="seg guide-switch" id="guide-switch" role="tablist" aria-label="Guide pages"></div>
+      <div id="guide-start" hidden>
+        <div class="card start-hero">
+          <h2>Getting started</h2>
+          <p class="hint">Everything you need to develop film at home. Tick off what you already have; the rest is your shopping list.</p>
+          <div class="start-progress"><div class="bar"><div id="gear-bar"></div></div><span id="gear-count"></span></div>
+          <label class="check"><input type="checkbox" id="gear-only-missing"> Show only what I still need</label>
+        </div>
+        <div class="card">
+          <h2>Which chemistry to start with</h2>
+          <div id="start-paths"></div>
+        </div>
+        <div id="gear-groups"></div>
+        <div class="card">
+          <h2>Your first session</h2>
+          <ol class="notes" id="first-session"></ol>
+        </div>
       </div>
-      <div class="card" id="guide-ecn2-card" hidden>
-        <h2>ECN-2 film (remjet removal)</h2>
-        <p id="guide-ecn2"></p>
+      <div id="guide-kit">
+        <div class="card">
+          <h2>Processing notes</h2>
+          <ul class="notes" id="guide-process"></ul>
+        </div>
+        <div class="card" id="guide-ecn2-card" hidden>
+          <h2>ECN-2 film (remjet removal)</h2>
+          <p id="guide-ecn2"></p>
+        </div>
+        <div class="card" id="guide-keeping-card" hidden>
+          <h2>Keeping</h2>
+          <table class="tbl" id="guide-keeping"></table>
+        </div>
+        <div class="card" id="guide-trouble-card" hidden>
+          <h2>Troubleshooting</h2>
+          <div id="guide-trouble"></div>
+        </div>
+        <div class="card">
+          <h2>Safety &amp; disposal</h2>
+          <ul class="notes" id="guide-safety-kit"></ul>
+          <ul class="notes">
+            <li>Avoid skin and eye contact. Don't swallow the chemicals.</li>
+            <li>Keep away from children and food. Label every bottle clearly, and don't use bottles normally used for food or drink.</li>
+            <li>Don't pour photochemicals down the drain. Take them to a hazardous-waste collection point.</li>
+          </ul>
+        </div>
+        <p class="hint center" id="guide-source"></p>
       </div>
-      <div class="card" id="guide-keeping-card" hidden>
-        <h2>Keeping</h2>
-        <table class="tbl" id="guide-keeping"></table>
-      </div>
-      <div class="card" id="guide-trouble-card" hidden>
-        <h2>Troubleshooting</h2>
-        <div id="guide-trouble"></div>
-      </div>
-      <div class="card">
-        <h2>Safety &amp; disposal</h2>
-        <ul class="notes" id="guide-safety-kit"></ul>
-        <ul class="notes">
-          <li>Avoid skin and eye contact. Don't swallow the chemicals.</li>
-          <li>Keep away from children and food. Label every bottle clearly, and don't use bottles normally used for food or drink.</li>
-          <li>Don't pour photochemicals down the drain. Take them to a hazardous-waste collection point.</li>
-        </ul>
-      </div>
-      <p class="hint center" id="guide-source"></p>
     </section>
   </main>
 

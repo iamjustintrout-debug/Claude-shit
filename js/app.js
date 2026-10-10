@@ -1,5 +1,6 @@
 import { KITS, DEFAULT_KIT } from './kits.js';
 import { FILM_FORMATS, filmGroups, filmLabel, findFilm } from './films.js';
+import { GEAR, START_PATHS, FIRST_SESSION } from './gear.js';
 import { putPhoto, getPhoto, deletePhoto, newPhotoId, processImage, blobToDataURL, dataURLToBlob } from './photos.js';
 import {
   buildProgram, agitationCues, formatDuration, fmtTemp, fmtTol, fmtVol, mlToFlOz, ML_PER_FL_OZ,
@@ -29,7 +30,9 @@ const DEFAULT_STATE = {
     mixKey: {}, opts: {}, rotary: false, tankMl: 500, agit: 'kit', film: {}, format: '35mm',
     alarm: true, beeps: true, miniTimer: true, awake: 'dev', // awake: 'off' | 'dev' | 'always'
     notifLead: 7, snipRemind: true, backupRemind: true, appBadge: false,
+    guidePage: null, // 'start' | 'kit'; null = pick for the user
   },
+  gear: {}, // equipment ids ticked on Getting started
   dismissed: [], // notification ids you've dismissed
   lastBackup: null, // ISO time of the last full backup
 };
@@ -132,7 +135,8 @@ function renderHeader() {
   sel.disabled = !!run || !ids.length;
   renderBell();
   $('.kit-pick').firstChild.textContent = onBatch ? 'Mixed chemistry' : 'Your chemistry kit';
-  const general = activeTab === 'home' || activeTab === 'rolls' || activeTab === 'settings';
+  const general = activeTab === 'home' || activeTab === 'rolls' || activeTab === 'settings'
+    || (activeTab === 'guide' && guidePage() === 'start');
   $('#kit-banner').hidden = kit().verified || !!run || general;
   // The picker only matters on kit-specific pages (Develop, Batch, Mix, Guide).
   $('.kit-pick').hidden = general;
@@ -1677,7 +1681,7 @@ function introCard(isNew) {
       el('p', { textContent: 'DevApp guides you through developing your own film: mixing the chemistry, timing every step, and keeping a record of each roll.' }),
       flowSteps(false),
       el('p', { className: 'hint', textContent: 'Tap Get started, choose the chemistry kit you have at the top of the Mix page, and follow the steps.' }),
-      go);
+      go, gearLink());
   }
   return el('div', { className: 'card intro slim' },
     el('p', { className: 'intro-tag', textContent: 'Your home film lab: mix, develop and log every roll.' }),
@@ -2015,8 +2019,81 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) rend
 setInterval(renderBell, 60 * 60 * 1000);
 
 // ---------- Guide ----------
+// Two pages: "Getting started" (equipment, for everyone) and the selected kit's notes.
+
+// New users (no chemistry mixed yet) land on Getting started until they pick a page.
+const guidePage = () => state.prefs.guidePage ?? (Object.keys(state.batches).length ? 'kit' : 'start');
+
+function showGuidePage(page) {
+  state.prefs.guidePage = page;
+  save();
+  renderGuidePage();
+  renderHeader();
+}
+
+function renderGuidePage() {
+  const page = guidePage();
+  segmented($('#guide-switch'), ['start', 'kit'], page, (v) => (v === 'start' ? 'Getting started' : 'Your kit'), showGuidePage);
+  $('#guide-start').hidden = page !== 'start';
+  $('#guide-kit').hidden = page !== 'kit';
+  if (page === 'start') renderGearList();
+}
+
+function gearLink() {
+  const b = el('button', { type: 'button', className: 'link-btn', textContent: 'New to this? See the equipment you need →' });
+  b.addEventListener('click', () => { state.prefs.guidePage = 'start'; save(); showTab('guide'); });
+  return b;
+}
+
+const NEED_LABEL = { essential: 'Essential', recommended: 'Recommended', optional: 'Optional' };
+
+function renderGearCount() {
+  const essentials = GEAR.flatMap((g) => g.items).filter((i) => i.need === 'essential');
+  const got = essentials.filter((i) => state.gear[i.id]).length;
+  $('#gear-bar').style.width = `${(got / essentials.length) * 100}%`;
+  $('#gear-count').textContent = got === essentials.length ? 'All essentials ready' : `${got} of ${essentials.length} essentials`;
+}
+
+function renderGearList() {
+  const have = state.gear;
+  renderGearCount();
+  const onlyMissing = $('#gear-only-missing').checked;
+
+  $('#start-paths').replaceChildren(...START_PATHS.map((p) =>
+    el('div', { className: 'start-path' }, el('b', { textContent: p.title }), el('span', { className: 'hint', textContent: p.text }))));
+  $('#first-session').replaceChildren(...FIRST_SESSION.map((t) => el('li', { textContent: t })));
+
+  $('#gear-groups').replaceChildren(...GEAR.map((g) => {
+    const items = g.items.filter((i) => !onlyMissing || !have[i.id]);
+    if (!items.length) return null;
+    return el('div', { className: 'card gear-group' },
+      el('h2', { textContent: g.title }),
+      el('p', { className: 'hint', textContent: g.intro }),
+      el('ul', { className: 'gear-list' }, ...items.map((i) => {
+        const cb = el('input', { type: 'checkbox', checked: !!have[i.id] });
+        cb.setAttribute('aria-label', `I have: ${i.name}`);
+        const li = el('li', { className: have[i.id] ? 'gear have' : 'gear' });
+        // Update in place so the list doesn't jump; "only missing" items stay until the next visit.
+        cb.addEventListener('change', () => {
+          if (cb.checked) state.gear[i.id] = true; else delete state.gear[i.id];
+          save();
+          li.classList.toggle('have', cb.checked);
+          renderGearCount();
+        });
+        li.append(
+          el('label', { className: 'gear-row' }, cb,
+            el('span', { className: 'gear-text' },
+              el('span', { className: 'gear-name' }, el('span', { className: 'gear-title', textContent: i.name }), el('span', { className: `need ${i.need}`, textContent: NEED_LABEL[i.need] })),
+              el('span', { className: 'gear-desc', textContent: i.text }))));
+        return li;
+      })));
+  }));
+}
+$('#gear-only-missing').addEventListener('change', renderGearList);
+
 
 function renderGuide() {
+  renderGuidePage();
   const k = kit();
   $('#guide-process').replaceChildren(...(k.agitationGuide ?? []).map((t) => el('li', { textContent: t })));
 

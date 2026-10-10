@@ -48,7 +48,12 @@ agitation method and push/pull.
   chemistry, and backup reminders. Each has a shortcut to deal with it, and can be dismissed (it comes
   back if things get worse). Set the warning window, turn reminders off, or show the count on the
   home-screen icon in Settings.
-- **Guide** (book, top right): processing notes, keeping times, troubleshooting and safety notes for the selected kit.
+- **Guide** (book, top right), two pages:
+  - **Getting started:** the equipment for home developing (changing bag, tank and reels, measuring
+    and mixing gear, thermometer and water bath, clips, archival sleeves, scanning and safety gear),
+    each marked essential, recommended or optional. Tick off what you have to get a shopping list. Also
+    which chemistry to start with and a first-session walkthrough.
+  - **Your kit:** processing notes, keeping times, troubleshooting and safety notes for the selected kit.
 - **Settings** (gear, top right): choose °C or °F and ml or fl oz independently; turn the end-of-step
   alarm, agitation beeps and floating timer on or off; keep the screen awake while developing, always,
   or never.
@@ -73,6 +78,7 @@ npm test    # unit tests for mixing/time logic and every kit
 - `js/kits.js`: every kit's recipes and processing program. Add a kit by adding an entry. Mark it
   `verified: true` only once checked against the printed sheet.
 - `js/films.js`: the film catalog for the picker.
+- `js/gear.js`: the Getting started equipment list.
 - `js/logic.js`: pure calculation, unit-formatting and roll-log functions (tested in `tests/`).
 - `js/app.js`: UI.
 - `sw.js`: offline cache. **Bump `VERSION` whenever any file changes** so installed copies update.
