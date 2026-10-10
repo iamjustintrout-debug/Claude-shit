@@ -1284,16 +1284,16 @@ navigator.storage?.persist?.().catch(() => {});
 const sortedLog = () => [...rollLog].sort((a, b) => b.date.localeCompare(a.date) || (b.rollNo ?? 0) - (a.rollNo ?? 0));
 
 function renderRollStats() {
-  const year = String(new Date().getFullYear());
-  const counts = {};
-  for (const e of rollLog) counts[e.film.name] = (counts[e.film.name] ?? 0) + 1;
-  const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 3);
-  $('#rolls-stats').replaceChildren(
-    el('h2', { textContent: 'Roll log' }),
-    el('div', { className: 'stat-row' },
-      el('div', {}, el('div', { className: 'big-num', textContent: rollLog.length }), el('div', { className: 'hint', textContent: 'rolls logged' })),
-      el('div', {}, el('div', { className: 'big-num', textContent: rollLog.filter((e) => e.date.startsWith(year)).length }), el('div', { className: 'hint', textContent: `in ${year}` }))),
-    top.length ? el('p', { className: 'hint', textContent: `Most used: ${top.map(([n, c]) => `${n} (${c})`).join(', ')}` }) : null);
+  const st = rollStats(rollLog);
+  const card = $('#rolls-stats');
+  card.hidden = !st.total;
+  if (!st.total) return card.replaceChildren();
+  card.replaceChildren(
+    el('h2', { textContent: 'Activity' }),
+    el('div', { className: 'stats' },
+      statTile(st.last30, '30 days'), statTile(st.year, `in ${new Date().getFullYear()}`), statTile(st.total, 'all time')),
+    weekChart(st.weeks),
+    topLists(st));
 }
 
 const openRolls = new Set(); // roll ids expanded in the list
@@ -1726,20 +1726,23 @@ function countTable(title, rows, noun) {
     rows.length > 5 ? el('tr', {}, el('td', { className: 'sub', textContent: `+${rows.length - 5} more ${noun}` }), el('td')) : null));
 }
 
-function activitySection() {
-  const st = rollStats(rollLog);
-  if (!st.total) return [];
-  const thisWeek = st.weeks.at(-1).count;
-  const top = el('details', { className: 'top-lists' },
+// The 30-day film and chemistry tables, folded away until tapped.
+function topLists(st) {
+  return el('details', { className: 'top-lists' },
     el('summary', { textContent: 'Top films & chemistry, last 30 days' }),
     st.last30
       ? el('div', { className: 'count-tables' }, countTable('Film', st.films30, 'films'), countTable('Chemistry', st.kits30, 'kits'))
       : el('p', { className: 'hint', textContent: 'No rolls in the last 30 days.' }));
-  return [sectionHead('Activity'), el('div', { className: 'card activity' },
-    el('div', { className: 'stats' },
-      statTile(thisWeek, 'this week'), statTile(st.last30, '30 days'), statTile(st.total, 'all time')),
-    weekChart(st.weeks),
-    top)];
+}
+
+// Home shows just the counts; the chart and top lists live on the Rolls tab.
+function activitySection() {
+  const st = rollStats(rollLog);
+  if (!st.total) return [];
+  const more = el('button', { type: 'button', className: 'link-btn', textContent: 'Chart →' });
+  more.addEventListener('click', () => showTab('rolls'));
+  return [sectionHead('Activity', more), el('div', { className: 'stats home-stats' },
+    statTile(st.weeks.at(-1).count, 'this week'), statTile(st.last30, '30 days'), statTile(st.total, 'all time'))];
 }
 
 // Chips for switching between mixed chemistries; picking one also selects
@@ -1796,6 +1799,9 @@ function renderHome() {
         el('span', { className: 'hint recent-date', textContent: shortDate(e.date) }))))));
   }
   $('#tab-home').replaceChildren(...items);
+  // Keep the selected chemistry chip in view in the scrolling row.
+  const chip = $('#tab-home .chem-chip[aria-checked="true"]');
+  if (chip) requestAnimationFrame(() => { chip.parentElement.scrollLeft = chip.offsetLeft - chip.parentElement.offsetLeft - 16; });
 }
 
 // ---------- Settings ----------

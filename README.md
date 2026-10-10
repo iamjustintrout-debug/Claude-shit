@@ -4,8 +4,8 @@ A phone app for mixing film-developing chemistry and timing the process.
 
 It opens to a **dashboard**. New users see the Mix → Develop → Log flow and a button to start.
 After that it leads with your chemistry (rolls used and left, use-by date, the next roll's developer
-time and a Start button), then a compact activity summary (this week, 30 days, all time, rolls per
-week, with top films and kits folded away) and your 3 most recent rolls. Tap the raised Home button in the middle of the tab bar to return to it. Reopening the app
+time and a Start button), then three activity counts (this week, 30 days, all time) and your 3 most recent rolls. With
+several batches mixed, swipe the chip row to switch between them. Tap the raised Home button in the middle of the tab bar to return to it. Reopening the app
 while it's still open returns to where you were, and a timer that was running carries on.
 
 Pick your chemistry kit at the top of Develop, Batch, Mix or Guide (or tap a batch on the dashboard), and
@@ -36,7 +36,8 @@ agitation method and push/pull.
   - Leave the Develop tab mid-run and a floating timer bar follows you across the app. Pause,
     resume or start the next step from it, collapse it to a slim strip, or tap it to jump back.
 - **Batch:** rolls developed and use-by dates, tracked separately for each kit.
-- **Rolls:** a log of every roll you develop.
+- **Rolls:** a log of every roll you develop, with an activity card on top (rolls per week for the
+  last 8 weeks, and your top films and chemistry for the last 30 days).
   - Records the film (picked from a list of C-41, E-6, ECN-2 and B&W stocks, or typed in), format,
     chemistry, settings, developer time and temperature, and your notes.
   - Search, filter, edit or delete entries, and add past rolls by hand.
