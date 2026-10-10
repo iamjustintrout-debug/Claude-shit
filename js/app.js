@@ -90,17 +90,44 @@ const choiceLabel = (l) => (typeof l === 'object' ? T(l) : l);
 
 // ---------- Header: kit + units ----------
 
-$('#kit').append(...Object.values(KITS).map((k) => el('option', { value: k.id, textContent: `${k.name} (${k.process})` })));
 $('#kit').addEventListener('change', () => {
-  if (run) return;
+  if (run || !KITS[$('#kit').value]) return;
   state.kitId = $('#kit').value;
   save();
   renderAll();
 });
 
+// Kits with a mixed batch that still has rolls left.
+function availableKits() {
+  return Object.keys(KITS).filter((id) => {
+    const b = state.batches[id];
+    const mix = b && KITS[id].mixes[b.mixKey];
+    return mix && b.rolls < mix.rolls;
+  });
+}
+
 function renderHeader() {
-  $('#kit').value = state.kitId;
-  $('#kit').disabled = !!run;
+  // On Batch, only chemistry that's mixed and still usable is offered.
+  const onBatch = activeTab === 'batch';
+  const avail = availableKits();
+  const ids = onBatch ? avail : Object.keys(KITS);
+  if (onBatch && avail.length && !avail.includes(state.kitId) && !run) {
+    state.kitId = avail[0];
+    save();
+    renderMix();
+    renderGuide();
+  }
+  const sel = $('#kit');
+  const sig = ids.join(',') || 'none';
+  if (sel.dataset.sig !== sig) {
+    sel.replaceChildren(...(ids.length
+      ? ids.map((id) => el('option', { value: id, textContent: `${KITS[id].name} (${KITS[id].process})` }))
+      : [el('option', { value: '', textContent: 'No chemistry mixed yet' })]));
+    sel.dataset.sig = sig;
+  }
+  if (ids.length) sel.value = state.kitId;
+  sel.disabled = !!run || !ids.length;
+  $('.kit-pick').firstChild.textContent = onBatch ? 'Mixed chemistry' : 'Your chemistry kit';
   const general = activeTab === 'home' || activeTab === 'rolls' || activeTab === 'settings';
   $('#kit-banner').hidden = kit().verified || !!run || general;
   // The picker only matters on kit-specific pages (Develop, Batch, Mix, Guide).
@@ -1250,7 +1277,9 @@ function renderRollStats() {
     top.length ? el('p', { className: 'hint', textContent: `Most used: ${top.map(([n, c]) => `${n} (${c})`).join(', ')}` }) : null);
 }
 
-function rollCard(e) {
+const openRolls = new Set(); // roll ids expanded in the list
+
+function rollCard(e, collapsible = false) {
   if (e.id === editingId) return rollEditor(e);
   const dev = e.devSec != null ? `${e.devName} ${formatDuration(e.devSec)}${e.devTemp ? ` at ${T(e.devTemp)}` : ''}` : '';
   const meta = [fmtDate(e.date), e.kitName, e.rollNo ? `roll #${e.rollNo}` : null, e.mixLabel || null].filter(Boolean).join(' · ');
@@ -1264,14 +1293,26 @@ function rollCard(e) {
     for (const id of e.photos ?? []) deletePhoto(id).catch(() => {});
     renderRolls();
   });
-  return el('div', { className: 'card roll' },
-    el('div', { className: 'roll-head' }, el('b', { textContent: e.film.name }), e.format ? el('span', { className: 'chip', textContent: e.format }) : null),
+  const head = el('div', { className: 'roll-head' }, el('b', { textContent: e.film.name }), e.format ? el('span', { className: 'chip', textContent: e.format }) : null);
+  const body = [
     el('div', { className: 'hint', textContent: meta }),
     e.settings.length ? el('div', { className: 'roll-line', textContent: e.settings.map((x) => settingText(x, tempUnits())).join(' · ') }) : null,
     dev ? el('div', { className: 'roll-line', textContent: dev }) : null,
     e.notes ? el('p', { className: 'roll-notes', textContent: e.notes }) : null,
     photoStrip(e),
-    el('div', { className: 'btn-row' }, edit, del));
+    el('div', { className: 'btn-row' }, edit, del),
+  ];
+  if (!collapsible) return el('div', { className: 'card roll' }, head, ...body);
+  // Collapsed: film, format, date and kit on one line; tap to see the rest.
+  const photos = (e.photos ?? []).length;
+  const d = el('details', { className: 'card roll roll-fold' },
+    el('summary', {},
+      el('div', { className: 'roll-sum' }, head,
+        el('span', { className: 'hint', textContent: [shortDate(e.date), e.kitName, photos ? `${photos} photo${photos === 1 ? '' : 's'}` : null].filter(Boolean).join(' · ') }))),
+    el('div', { className: 'roll-body' }, ...body.slice(1)));
+  d.open = openRolls.has(e.id);
+  d.addEventListener('toggle', () => { if (d.open) openRolls.add(e.id); else openRolls.delete(e.id); });
+  return d;
 }
 
 // ---------- Roll photos ----------
@@ -1431,7 +1472,8 @@ function renderRolls() {
   const q = $('#rolls-q').value.trim().toLowerCase();
   const list = sortedLog().filter((e) => (!kf.value || e.kitId === kf.value)
     && (!q || `${e.film.name} ${e.notes} ${e.format} ${e.kitName}`.toLowerCase().includes(q)));
-  $('#rolls-list').replaceChildren(...(list.length ? list.map(rollCard) : [el('p', { className: 'hint center',
+  const collapsible = list.length > 1;
+  $('#rolls-list').replaceChildren(...(list.length ? list.map((e) => rollCard(e, collapsible)) : [el('p', { className: 'hint center',
     textContent: rollLog.length ? 'No rolls match.' : 'No rolls yet. Finish a development run and tap "Save to roll log", or add a past roll below.' })]));
   renderAddRoll();
 }
@@ -1453,6 +1495,7 @@ function renderAddRoll() {
       film: { id: v.film.id, name: v.film.name }, format: v.format, settings: [], devName: '', devSec: null, devTemp: null, notes: v.notes,
     });
     saveLog(); save();
+    $('#rolls-add-card').open = false;
     renderRolls();
   });
   $('#rolls-add').replaceChildren(form.root, add);
@@ -1471,6 +1514,18 @@ function download(name, text, type) {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
+
+// One "Export or restore" button that opens a menu of options.
+function setBackupMenu(open) {
+  $('#backup-menu').hidden = !open;
+  $('#backup-btn').setAttribute('aria-expanded', String(open));
+  // It opens near the bottom of the page: bring all of it into view above the tab bar.
+  if (open) requestAnimationFrame(() => $('#backup-menu').scrollIntoView({ behavior: 'smooth', block: 'center' }));
+}
+$('#backup-btn').addEventListener('click', (ev) => { ev.stopPropagation(); setBackupMenu($('#backup-menu').hidden); });
+$('#backup-menu').addEventListener('click', () => setTimeout(() => setBackupMenu(false), 0));
+document.addEventListener('click', (ev) => { if (!ev.target.closest('.menu-wrap')) setBackupMenu(false); });
+document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') setBackupMenu(false); });
 
 $('#rolls-csv').addEventListener('click', () => download(`devapp-rolls-${today()}.csv`, logToCSV(sortedLog(), tempUnits()), 'text/csv'));
 $('#rolls-json').addEventListener('click', async () => {

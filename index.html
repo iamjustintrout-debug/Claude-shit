@@ -204,17 +204,21 @@
         <label>Chemistry <select id="rolls-kit"></select></label>
       </div>
       <div id="rolls-list"></div>
-      <div class="card">
-        <h2>Add a past roll</h2>
+      <details class="card fold" id="rolls-add-card">
+        <summary><span class="fold-title">Add a past roll</span></summary>
+        <p class="hint">Log rolls you developed before using DevApp, or ones a lab developed for you.</p>
         <div id="rolls-add"></div>
-      </div>
+      </details>
       <div class="card">
-        <h2>Backup</h2>
-        <p class="hint">Your roll log and photos are stored only on this device. Export a backup now and then; it includes your photos.</p>
-        <div class="btn-row">
-          <button class="btn" id="rolls-csv">Export spreadsheet (CSV)</button>
-          <button class="btn" id="rolls-json">Export backup</button>
-          <label class="btn file-btn">Import backup<input type="file" id="rolls-import" accept="application/json,.json" hidden></label>
+        <h2>Back up &amp; export</h2>
+        <p class="hint">Your roll log and photos are stored only on this phone. Export a copy to keep them safe, to open them in a spreadsheet, or to move them to another phone.</p>
+        <div class="menu-wrap">
+          <button type="button" class="btn wide" id="backup-btn" aria-haspopup="menu" aria-expanded="false">Export or restore <span class="caret" aria-hidden="true"></span></button>
+          <div class="menu" id="backup-menu" role="menu" hidden>
+            <button type="button" role="menuitem" class="menu-item" id="rolls-json"><b>Full backup</b><small>Everything, including photos. Restore it later or on another phone.</small></button>
+            <button type="button" role="menuitem" class="menu-item" id="rolls-csv"><b>Spreadsheet (CSV)</b><small>Your roll log as a table for Excel, Numbers or Google Sheets. No photos.</small></button>
+            <label role="menuitem" class="menu-item"><b>Restore from a backup</b><small>Add the rolls and photos from a backup file to this phone.</small><input type="file" id="rolls-import" accept="application/json,.json" hidden></label>
+          </div>
         </div>
       </div>
     </section>
