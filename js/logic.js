@@ -25,8 +25,10 @@ export function mlToFlOz(ml) {
 }
 
 function oneVol(ml, units) {
-  if (units !== 'imperial') return `${Math.round(ml)} ml`;
+  // Small amounts keep a decimal (e.g. 3.5 ml of final rinse); big ones round.
+  if (units !== 'imperial') return `${ml < 100 ? Number(ml.toFixed(1)) : Math.round(ml)} ml`;
   const oz = mlToFlOz(ml);
+  if (oz < 1) return `${oz.toFixed(2)} fl oz`;
   return `${oz >= 10 ? oz.toFixed(1).replace(/\.0$/, '') : oz.toFixed(1)} fl oz`;
 }
 
@@ -41,6 +43,7 @@ export function fmtVol(ml, units) {
 }
 
 export function formatDuration(sec) {
+  if (!Number.isFinite(sec)) return '';
   const s = Math.max(0, Math.ceil(sec));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
@@ -117,13 +120,29 @@ export function agitationCues(stepSec, spec) {
 
 // ---------- Dates ----------
 
-export function addWeeks(date, weeks) {
-  return new Date(new Date(date).getTime() + weeks * 7 * DAY_MS);
+// Dates the app saves as 'YYYY-MM-DD' are local calendar days. new Date()
+// would read them as UTC midnight, which is the previous evening in the
+// Americas and shifts every use-by date by a day.
+export function parseDay(d) {
+  const m = typeof d === 'string' && /^(\d{4})-(\d{2})-(\d{2})$/.exec(d);
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(d);
 }
 
-export function daysUntil(date, now = new Date()) {
-  return Math.ceil((new Date(date).getTime() - new Date(now).getTime()) / DAY_MS);
+const startOfDay = (d) => { const x = parseDay(d); x.setHours(0, 0, 0, 0); return x; };
+
+export function addWeeks(date, weeks) {
+  const d = parseDay(date);
+  d.setDate(d.getDate() + weeks * 7);
+  return d;
 }
+
+// Whole calendar days from today to `date` (0 = today, negative = past).
+export function daysUntil(date, now = new Date()) {
+  return Math.round((startOfDay(date) - startOfDay(now)) / DAY_MS) || 0;
+}
+
+// A stored timestamp as a local 'YYYY-MM-DD'.
+export const localDay = (d) => new Date(d).toLocaleDateString('sv');
 
 // Use-by dates for a batch: [{ name, date, note }].
 export function batchExpiry(kit, mixedOn) {
@@ -173,7 +192,7 @@ export function settingText(s, units) {
 export function logToCSV(entries, units = 'metric') {
   const head = ['Date', 'Film', 'Format', 'Chemistry', 'Process', 'Mix', 'Roll #', 'Settings', 'Developer step', 'Dev time', 'Dev temp', 'Notes'];
   const rows = entries.map((e) => [
-    e.date.slice(0, 10), e.film.name, e.format, e.kitName, e.process, e.mixLabel, e.rollNo,
+    localDay(e.date), e.film.name, e.format, e.kitName, e.process, e.mixLabel, e.rollNo,
     e.settings.map((s) => settingText(s, units)).join('; '),
     e.devName, e.devSec != null ? formatDuration(e.devSec) : '', fmtTemp(e.devTemp, units), e.notes,
   ]);
@@ -228,7 +247,7 @@ export function rollStats(entries, now = new Date()) {
   return {
     last7: within(7).length,
     last30: last30.length,
-    year: entries.filter((e) => e.date.startsWith(year)).length,
+    year: entries.filter((e) => localDay(e.date).startsWith(year)).length,
     total: entries.length,
     weeks,
     films30: tally(last30, (e) => e.film?.name),
@@ -250,7 +269,7 @@ export function buildNotifications({
   const lead = prefs.leadDays ?? 7;
   const out = [];
   const add = (n) => out.push(n);
-  const dateStr = (d) => new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  const dateStr = (d) => parseDay(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
   const inDays = (n) => (n === 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n} days`);
 
   if (run?.done) {
@@ -301,7 +320,7 @@ export function buildNotifications({
 
     // Stored chemistry that hasn't been used for a while: snip-test it.
     if (kit.snipTestAfterDays && prefs.snip !== false && left > 0 && !expired.length) {
-      const used = log.filter((e) => e.kitId === kitId && e.date.slice(0, 10) >= b.mixedOn).map((e) => e.date.slice(0, 10)).sort().at(-1);
+      const used = log.filter((e) => e.kitId === kitId && localDay(e.date) >= b.mixedOn).map((e) => localDay(e.date)).sort().at(-1);
       const last = used ?? b.mixedOn;
       const idle = -daysUntil(last, now);
       if (idle >= kit.snipTestAfterDays) {

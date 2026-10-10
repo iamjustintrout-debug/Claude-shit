@@ -4,7 +4,7 @@ import { GEAR, START_PATHS, FIRST_SESSION } from './gear.js';
 import { putPhoto, getPhoto, deletePhoto, newPhotoId, processImage, blobToDataURL, dataURLToBlob } from './photos.js';
 import {
   buildProgram, agitationCues, formatDuration, fmtTemp, fmtTol, fmtVol, mlToFlOz, ML_PER_FL_OZ,
-  mixChecklist, totalWater, addWeeks, daysUntil, batchExpiry, buildNotifications,
+  mixChecklist, totalWater, addWeeks, daysUntil, batchExpiry, buildNotifications, parseDay, localDay,
   makeLogEntries, logToCSV, sanitizeLog, settingText, rollStats,
 } from './logic.js';
 
@@ -80,8 +80,12 @@ const volUnits = () => (state.volUnit === 'oz' ? 'imperial' : 'metric');
 const T = (t) => fmtTemp(t, tempUnits());
 const V = (ml) => fmtVol(ml, volUnits());
 const TOL = (tol) => fmtTol(tol, tempUnits());
+// Mix names like "500 ml" or "Quart (946 ml)" follow the volume setting.
+const VL = (text) => (text && state.volUnit === 'oz'
+  ? text.replace(/(\d+(?:\.\d+)?)\s?(ml|L)\b/g, (_, n, u) => V(Number(n) * (u === 'L' ? 1000 : 1)))
+  : text);
 const today = () => new Date().toLocaleDateString('sv'); // YYYY-MM-DD, local time
-const fmtDate = (d) => new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+const fmtDate = (d) => parseDay(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 const mixKeys = () => Object.keys(kit().mixes);
 const currentMixKey = () => {
   const k = state.prefs.mixKey[state.kitId];
@@ -114,10 +118,13 @@ function availableKits() {
 
 function renderHeader() {
   // On Batch, only chemistry that's mixed and still usable is offered.
+  // The kit you're on stays listed if it has a batch, even a used-up one, so
+  // "Details" on a used-up batch shows that batch rather than another kit's.
   const onBatch = activeTab === 'batch';
   const avail = availableKits();
-  const ids = onBatch ? avail : Object.keys(KITS);
-  if (onBatch && avail.length && !avail.includes(state.kitId) && !run) {
+  const hasBatch = !!KITS[state.kitId]?.mixes[state.batches[state.kitId]?.mixKey];
+  const ids = onBatch ? Object.keys(KITS).filter((id) => avail.includes(id) || (id === state.kitId && hasBatch)) : Object.keys(KITS);
+  if (onBatch && avail.length && !ids.includes(state.kitId) && !run) {
     state.kitId = avail[0];
     save();
     renderMix();
@@ -283,9 +290,9 @@ function renderMix() {
   const k = kit();
   const key = currentMixKey();
   $('#mix-size').classList.toggle('many', mixKeys().length > 4);
-  segmented($('#mix-size'), mixKeys(), key, (v) => k.mixes[v].short ?? k.mixes[v].label, (v) => {
+  segmented($('#mix-size'), mixKeys(), key, (v) => VL(k.mixes[v].short ?? k.mixes[v].label), (v) => {
     state.prefs.mixKey[state.kitId] = v; save(); renderMix();
-  }, (v) => k.mixes[v].sub);
+  }, (v) => VL(k.mixes[v].sub));
   $('#mix-size-hint').textContent = k.mixHint?.(key) ?? '';
   const baths = k.mixes[key].baths;
   const bathKey = (i) => `${state.kitId}|${key}|${i}`;
@@ -329,14 +336,27 @@ const dev = {
 };
 const preStepChecks = {};
 
+// Rebuilding the Develop setup must not throw away what you picked: rolls in
+// the tank and pre-steps (like remjet removal) are kept per kit, and the mix
+// and roll count only follow the batch when the batch itself has changed.
+let devSig = null;
+const preStepOn = {}; // kitId -> { preStepId: true }
+
 function syncDevFromBatch() {
   const k = kit();
-  dev.mix.replaceChildren(...mixKeys().map((v) => el('option', { value: v, textContent: k.mixes[v].label })));
-  dev.rolls.replaceChildren(...Array.from({ length: k.maxRollsPerTank }, (_, i) => el('option', { value: i + 1, textContent: i + 1 })));
   const b = batch();
-  dev.mix.value = b?.mixKey ?? currentMixKey();
-  dev.used.value = b ? b.rolls : 0;
+  const sig = `${k.id}|${b?.mixKey}|${b?.rolls}|${b?.mixedOn}`;
+  const same = sig === devSig;
+  const prev = { mix: dev.mix.value, used: dev.used.value, rolls: dev.rolls.value };
+  devSig = sig;
+  dev.mix.replaceChildren(...mixKeys().map((v) => el('option', { value: v, textContent: VL(k.mixes[v].label) })));
+  dev.rolls.replaceChildren(...Array.from({ length: k.maxRollsPerTank }, (_, i) => el('option', { value: i + 1, textContent: i + 1 })));
+  const batchMix = b && k.mixes[b.mixKey] ? b.mixKey : currentMixKey();
+  dev.mix.value = same && k.mixes[prev.mix] ? prev.mix : batchMix;
+  dev.used.value = same && prev.used !== '' ? prev.used : (b ? b.rolls : 0);
+  if (same && Number(prev.rolls) <= k.maxRollsPerTank) dev.rolls.value = prev.rolls;
   $('#dev-used-editor').hidden = true;
+  $('#dev-used-edit').textContent = 'Adjust';
   dev.agit.value = state.prefs.agit;
   dev.rotary.checked = state.prefs.rotary;
   $('#dev-rotary-wrap').hidden = !k.rotary;
@@ -345,8 +365,9 @@ function syncDevFromBatch() {
   dev.tank.value = state.volUnit === 'oz' ? +mlToFlOz(state.prefs.tankMl).toFixed(1) : state.prefs.tankMl;
 
   $('#dev-presteps').replaceChildren(...(k.preSteps ?? []).map((p) => {
-    const cb = (preStepChecks[p.id] = el('input', { type: 'checkbox' }));
-    cb.addEventListener('change', renderProgram);
+    const on = (preStepOn[k.id] ??= {});
+    const cb = (preStepChecks[p.id] = el('input', { type: 'checkbox', checked: !!on[p.id] }));
+    cb.addEventListener('change', () => { on[p.id] = cb.checked; renderProgram(); });
     return el('label', { className: 'check' }, cb, p.label);
   }));
   $('#dev-toggles').hidden = !k.rotary && !(k.preSteps ?? []).length;
@@ -826,7 +847,7 @@ $('#run-pause').addEventListener('click', () => {
 });
 
 $('#run-skip').addEventListener('click', () => {
-  if (run.phase === 'running' && !confirm('Skip the rest of this step?')) return;
+  if ((run.phase === 'running' || run.phase === 'paused') && !confirm('Skip the rest of this step?')) return;
   advance();
 });
 
@@ -982,7 +1003,7 @@ function persistRun() {
 function restoreRun() {
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(RUN_KEY)); } catch { /* ignore */ }
-  if (!saved || !KITS[saved.kitId] || !Array.isArray(saved.steps) || !saved.steps[saved.idx]
+  if (!saved || !KITS[saved.kitId] || !KITS[saved.kitId].mixes[saved.opts?.mixKey] || !Array.isArray(saved.steps) || !saved.steps[saved.idx]
     || Date.now() - saved.savedAt > RUN_MAX_AGE_MS) {
     try { localStorage.removeItem(RUN_KEY); } catch { /* ignore */ }
     return false;
@@ -1159,15 +1180,20 @@ function wantAwake() {
 }
 
 // Callers used to pass on/off; the setting and run state now decide.
+let wakePending = null;
 function keepAwake() {
   applyAwake(wantAwake());
 }
 
 async function applyAwake(on) {
   try {
-    if (on && !wakeLock && 'wakeLock' in navigator && document.visibilityState === 'visible') {
-      wakeLock = await navigator.wakeLock.request('screen');
+    if (on && !wakeLock && !wakePending && 'wakeLock' in navigator && document.visibilityState === 'visible') {
+      // One request at a time: two quick calls would otherwise both get a
+      // lock, and the orphaned one would keep the screen on forever.
+      wakePending = navigator.wakeLock.request('screen');
+      try { wakeLock = await wakePending; } finally { wakePending = null; }
       wakeLock.addEventListener('release', () => { wakeLock = null; });
+      if (!wantAwake()) { await wakeLock.release(); wakeLock = null; }
     } else if (!on && wakeLock) {
       await wakeLock.release();
       wakeLock = null;
@@ -1213,7 +1239,7 @@ function renderBatch() {
     const cap = k.mixes[b.mixKey].rolls;
     const exp = batchExpiry(k, b.mixedOn);
     cur.replaceChildren(
-      el('h2', { textContent: `${k.name}: ${k.mixes[b.mixKey].label}, mixed ${fmtDate(b.mixedOn)}` }),
+      el('h2', { textContent: `${k.name}: ${VL(k.mixes[b.mixKey].label)}, mixed ${fmtDate(b.mixedOn)}` }),
       el('div', { className: 'big-num', textContent: `${b.rolls} / ${cap}` }),
       el('div', { className: 'hint', textContent: b.rolls >= cap ? 'Capacity reached. Mix a new batch.' : `rolls developed. Next is roll ${b.rolls + 1}.` }),
       el('div', { className: b.rolls >= cap ? 'bar full' : 'bar' }, el('div', { style: `width:${Math.min(100, (b.rolls / cap) * 100)}%` })),
@@ -1238,8 +1264,8 @@ function renderBatch() {
     rows.length ? el('table', { className: 'tbl' }, ...rows) : null);
 
   const bm = $('#batch-mix');
-  bm.replaceChildren(...mixKeys().map((v) => el('option', { value: v, textContent: k.mixes[v].label })));
-  bm.value = b?.mixKey ?? currentMixKey();
+  bm.replaceChildren(...mixKeys().map((v) => el('option', { value: v, textContent: VL(k.mixes[v].label) })));
+  bm.value = b && k.mixes[b.mixKey] ? b.mixKey : currentMixKey();
   $('#batch-date').value = b?.mixedOn ?? '';
   $('#batch-rolls').value = b?.rolls ?? 0;
   $('#batch-opened').value = meta.openedOn ?? '';
@@ -1299,8 +1325,18 @@ function renderRollStats() {
 
 const openRolls = new Set(); // roll ids expanded in the list
 
+// The open editor is kept across list redraws (search, photo changes) so
+// unsaved edits survive; it's rebuilt only for a different roll.
+let editorNode = null;
+
 function rollCard(e, collapsible = false) {
-  if (e.id === editingId) return rollEditor(e);
+  if (e.id === editingId) {
+    if (editorNode?.dataset.rollId !== e.id) {
+      editorNode = rollEditor(e);
+      editorNode.dataset.rollId = e.id;
+    }
+    return editorNode;
+  }
   const dev = e.devSec != null ? `${e.devName} ${formatDuration(e.devSec)}${e.devTemp ? ` at ${T(e.devTemp)}` : ''}` : '';
   const meta = [fmtDate(e.date), e.kitName, e.rollNo ? `roll #${e.rollNo}` : null, e.mixLabel || null].filter(Boolean).join(' · ');
   const edit = el('button', { className: 'btn small', textContent: 'Edit' });
@@ -1360,6 +1396,7 @@ function photoStrip(e) {
   input.addEventListener('change', () => addPhotos(e, [...input.files]));
   const add = el('label', { className: 'thumb add', ariaLabel: 'Add photos' },
     el('span', { textContent: '+' }), el('small', { textContent: ids.length ? 'Add' : 'Add photo' }), input);
+  keyboardFilePicker(add, input);
   return el('div', { className: 'photos' }, ...thumbs, add);
 }
 
@@ -1464,7 +1501,7 @@ function rollForm({ film, format, date, notes, kitId, withKit }) {
 }
 
 function rollEditor(e) {
-  const form = rollForm({ film: filmValue(e.film), format: e.format, date: e.date.slice(0, 10), notes: e.notes, kitId: e.kitId });
+  const form = rollForm({ film: filmValue(e.film), format: e.format, date: localDay(e.date), notes: e.notes, kitId: e.kitId });
   const saveBtn = el('button', { className: 'btn primary small', textContent: 'Save' });
   const cancel = el('button', { className: 'btn small ghost', textContent: 'Cancel' });
   saveBtn.addEventListener('click', () => {
@@ -1473,7 +1510,7 @@ function rollEditor(e) {
     rememberCustomFilms([v.film]);
     Object.assign(e, {
       film: { id: v.film.id, name: v.film.name }, format: v.format, notes: v.notes,
-      date: v.date && v.date !== e.date.slice(0, 10) ? `${v.date}T12:00:00.000Z` : e.date,
+      date: v.date && v.date !== localDay(e.date) ? `${v.date}T12:00:00.000Z` : e.date,
     });
     editingId = null;
     saveLog(); save();
@@ -1495,7 +1532,9 @@ function renderRolls() {
   const collapsible = list.length > 1;
   $('#rolls-list').replaceChildren(...(list.length ? list.map((e) => rollCard(e, collapsible)) : [el('p', { className: 'hint center',
     textContent: rollLog.length ? 'No rolls match.' : 'No rolls yet. Finish a development run and tap "Save to roll log", or add a past roll below.' })]));
-  renderAddRoll();
+  // Built once, so a half-filled form survives searching and other redraws.
+  if (!$('#rolls-add').childElementCount) renderAddRoll();
+  if (!editingId) editorNode = null;
 }
 $('#rolls-q').addEventListener('input', renderRolls);
 $('#rolls-kit').addEventListener('change', renderRolls);
@@ -1516,23 +1555,25 @@ function renderAddRoll() {
     });
     saveLog(); save();
     $('#rolls-add-card').open = false;
+    $('#rolls-add').replaceChildren(); // start the next one blank
     renderRolls();
   });
   $('#rolls-add').replaceChildren(form.root, add);
 }
 
-function download(name, text, type) {
+// Resolves true once the file was shared or downloaded, false if cancelled.
+async function download(name, text, type) {
   const blob = new Blob([text], { type });
   const file = new File([blob], name, { type });
   if (navigator.canShare?.({ files: [file] })) {
-    navigator.share({ files: [file], title: name }).catch(() => {});
-    return;
+    return navigator.share({ files: [file], title: name }).then(() => true, () => false);
   }
   const a = el('a', { href: URL.createObjectURL(blob), download: name });
   document.body.append(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  return true;
 }
 
 // One "Export or restore" button that opens a menu of options.
@@ -1555,11 +1596,14 @@ $('#rolls-json').addEventListener('click', async () => {
     const rec = await getPhoto(id).catch(() => null);
     if (rec) photos[id] = { full: await blobToDataURL(rec.full), thumb: await blobToDataURL(rec.thumb), w: rec.w, h: rec.h, added: rec.added };
   }
-  state.lastBackup = new Date().toISOString();
-  save();
-  renderBell();
-  download(`devapp-backup-${today()}.json`,
+  const saved = await download(`devapp-backup-${today()}.json`,
     JSON.stringify({ app: 'DevApp', version: 2, rolls: rollLog, customFilms: state.customFilms, photos }), 'application/json');
+  // Only a backup that was actually saved silences the backup reminder.
+  if (saved) {
+    state.lastBackup = new Date().toISOString();
+    save();
+    renderBell();
+  }
 });
 $('#rolls-import').addEventListener('change', async (ev) => {
   const file = ev.target.files?.[0];
@@ -1689,7 +1733,7 @@ function statTile(value, label) {
   return el('div', { className: 'stat' }, el('span', { className: 'stat-num', textContent: value }), el('span', { className: 'stat-label', textContent: label }));
 }
 
-const shortDate = (d) => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+const shortDate = (d) => parseDay(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
 // Rolls per week (last 8 weeks): one series, so one colour and no legend.
 // Tap a bar to read its exact count.
@@ -1812,6 +1856,9 @@ function setUnits(temp, vol) {
   if (vol) state.volUnit = vol;
   save();
   renderAll();
+  // A run in progress shows its temperature too.
+  const s = run?.steps[run.idx];
+  if (s) $('#run-temp').textContent = s.manual ? '' : [T(s.temp), TOL(s.tol)].filter(Boolean).join(' · ');
 }
 
 function renderSettings() {
@@ -1883,6 +1930,16 @@ $('.gear-btn').addEventListener('click', (e) => {
   b.classList.add('spin');
 });
 $('.gear-btn').addEventListener('animationend', (e) => e.currentTarget.classList.remove('spin'));
+
+// A <label> wrapping a hidden file input isn't reachable by keyboard; make it so.
+function keyboardFilePicker(label, input) {
+  label.tabIndex = 0;
+  label.setAttribute('role', label.getAttribute('role') ?? 'button');
+  label.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); input.click(); }
+  });
+}
+keyboardFilePicker($('#rolls-import').closest('label'), $('#rolls-import'));
 
 // ---------- Notifications ----------
 // A bell next to the title. Its badge counts active notifications you
@@ -1973,6 +2030,7 @@ function notifAction(nt) {
   setNotifPanel(false);
   const a = nt.action ?? {};
   if (a.kitId && a.kitId !== state.kitId && !run) selectKit(a.kitId);
+  if (a.go === 'guide') state.prefs.guidePage = 'kit'; // kit notes, not the equipment list
   showTab(a.go ?? 'home');
   // After this tap finishes, or the menu's outside-tap handler closes it again.
   if (a.backup) setTimeout(() => setBackupMenu(true), 0);

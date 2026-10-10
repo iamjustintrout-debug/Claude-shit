@@ -103,7 +103,6 @@ const ctec41 = {
     const notes = [`Times for rolls ${g * perGroup + 1}–${(g + 1) * perGroup} of this mix.`];
     if (rollGroup(o.lastRoll, perGroup) !== g) notes.push('This run spans two columns of the time table; using the times for the first roll.');
     if (push) notes.push(`Developer includes +${push * 30} s for the push.`);
-    if (o.temp !== '38') notes.push('Push times are only given for 38°C.');
     notes.push('Times include 10 s for filling and emptying the tank. Start the timer as you begin pouring.');
     return {
       notes,
@@ -322,7 +321,7 @@ const cs41 = {
 // ---------------------------------------------------------------------------
 // Unicolor C-41 powder kit (1 L)
 
-const UNI_TEMP = T(38, 102);
+const UNI_TEMP = T(39, 102);
 const UNI_PUSH = { 0: 1, 1: 1.25, 2: 1.5 };
 
 const unicolor = {
@@ -446,12 +445,13 @@ const df96 = {
     if (!temp) {
       return { error: `${pushName === 'Box' ? 'Box speed' : pushName} with ${m.label.toLowerCase()} agitation is off the Df96 chart (65–95°F). Try another agitation method.` };
     }
-    const base = m.sec * DF96_FILM[o.film ?? 'std'];
+    // The sheet's pull column (65–70°F) adds a minute.
+    const base = (m.sec + (push < 0 ? 60 : 0)) * DF96_FILM[o.film ?? 'std'];
     const prev = o.firstRoll - 1;
     const per = o.mix.perRoll ?? 30;
     const sec = base >= 480 ? base : Math.min(480, base + per * prev);
     const notes = [`${m.label} agitation: ${m.agitation.label}.`];
-    if (push) notes.push(`${push > 0 ? 'Push' : 'Pull'}: ${pushName}. Push or pull by changing temperature, about 10°F (6°C) per stop.`);
+    if (push) notes.push(`${push > 0 ? 'Push' : 'Pull'}: ${pushName}. Push or pull by changing temperature, about 10°F (6°C) per stop.${push < 0 ? ' Pulls get 1 extra minute.' : ''}`);
     if (o.push === '1.5') notes.push('For P3200 and Delta 3200 shot at 3200. Their native speed in Df96 is ISO 1000–1600.');
     if (o.film !== 'std') notes.push(`${o.film === 'tgrain' ? 'Tabular-grain films' : 'Bergger Pancro'} need ${DF96_FILM[o.film]}× the time to clear the dyes${o.film === 'pancro' ? ' and the anti-halation layer' : ''}.`);
     if (prev && base < 480) notes.push(`+${per} s per roll already processed (${prev}), up to 8 min.`);
@@ -599,7 +599,7 @@ const cs6 = {
       const level = push - (stock ? 1 : 0);
       const min = CS6_CHART[level]?.[col];
       if (min == null) {
-        const hint = level > 2 ? 'Use stock (undiluted) for bigger pushes.'
+        const hint = level > 2 && !stock && CS6_CHART[level - 1]?.[col] != null ? 'Use stock (undiluted) for bigger pushes.'
           : level < -2 ? 'Use the 1+1 dilution to pull.' : 'Pick a warmer temperature.';
         return { error: `${PUSH_LABEL[push]} with ${stock ? 'stock' : '1+1'} ${fdName} isn't on the chart at this temperature. ${hint}` };
       }
@@ -609,8 +609,11 @@ const cs6 = {
       agitation = cineAgitation(Number(o.temp), 6) ?? CS6_HOT_AGITATION;
       notes.push(`${fdName} ${dil.label}, ${PUSH_LABEL[push].toLowerCase()}: ${min} min from the chart for this temperature. Adjust ±1–2 min for density.`);
     }
-    const { stock, water } = dilute(o.tankMl, dil.waterParts);
-    notes.unshift({ d9: true, name: fdName, stock, water, label: dil.label });
+    if (o.tankMl > 0) {
+      const { stock, water } = dilute(o.tankMl, dil.waterParts);
+      notes.unshift({ d9: true, name: fdName, stock, water, label: dil.label });
+    }
+    if (dil.label === 'stock') notes.push('Undiluted stock uses twice the developer: 1 L of stock covers 8 rolls instead of 16.');
     notes.push('Without a water bath, preheat the 1st developer 2–4°F (1–2°C) warmer.');
     notes.push(`Agitation: ${agitation.label.toLowerCase()}. One cycle is one back-and-forth rotation or inversion, changing direction.`);
     const hot = Number(o.temp) === 104 || d9;
@@ -642,6 +645,7 @@ const cs6 = {
     'Find your temperature drop: pour 104°F water into the tank, run through the steps, then measure. Add half the drop to 104°F for your developer.',
     'Capacity per litre at 1+1: 8 rolls of 135-36 or 120, 12 of 135-24, 4 of 220, 16 of 126, 36 of 110, 32 sheets of 4x5. Stock doubles the volume needed. Cr6: 16 rolls per litre. Bf6: 24.',
     'Reusing Cr6 and Bf6 within a few days, you can often get 25–50% more rolls. Process until you no longer like the results, and snip-test after a week or more.',
+    'Snip test: run a snip of light-struck film (cut from the leader) through all three baths. It should come out clear. A dark or tinted snip means the chemistry is weak.',
   ],
   keeping: {
     mixed: [
@@ -786,6 +790,7 @@ const kodake6 = {
     'Invertible tanks. Initial agitation: lift the tank from the bath, turn it over 7–8 times in 15 s, tap it to dislodge bubbles, and put it back. Subsequent agitation (first developer, colour developer, bleach, fixer, washes): every 30 s, turn it over 2–3 times in 10 s and tap. Reversal bath, pre-bleach and final rinse get initial agitation only.',
     'Non-invertible tanks: rotate the reels back and forth 7–8 times in 15 s, then 4–5 times in 10 s every 30 s.',
     'Rotary processors: the tube rotation provides agitation. Follow the processor maker\'s recommendations, but don\'t pre-wet the film: it can shift speed and colour balance with some emulsions.',
+    'Snip test: before developing full rolls in stored chemistry, run a snip of light-struck film through the whole process. It should come out clear. If it\'s dark or coloured, mix fresh chemistry.',
   ],
   keeping: {
     mixed: [{ name: 'Working solutions', weeks: 1, note: 'in partly filled bottles; up to 4 weeks stored under nitrogen' }],

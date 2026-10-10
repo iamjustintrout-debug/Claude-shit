@@ -853,3 +853,8 @@ details.fold[open] > summary { margin-bottom: 8px; }
 .home-stats .stat { background: var(--card); border-color: transparent; }
 #rolls-stats .top-lists { margin-top: 4px; }
 #mix-size.many button { flex: 1 0 calc(33% - 6px); }
+/* Narrow phones: put a setting's buttons under its label. */
+@media (max-width: 360px) {
+  .setting:not(.switch-row) { flex-direction: column; align-items: stretch; }
+  .setting:not(.switch-row) .seg { width: auto; margin-top: 10px; }
+}

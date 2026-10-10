@@ -38,7 +38,10 @@ test('log entries: one per roll with dev step, settings and numbering', () => {
 
   const csv = logToCSV(entries, 'imperial').split('\n');
   assert.equal(csv.length, 3);
-  assert.match(csv[1], /^2026-10-09,Kodak Portra 400,35mm,C-TEC 41,C-41,1000 ml,5,Process temperature: 100°F; Push: \+1,Color developer,4:00,100°F,"test, ""quoted"""$/);
+  // The CSV date is the local calendar day of the run.
+  const day = new Date('2026-10-09T12:00:00Z').toLocaleDateString('sv');
+  assert.ok(csv[1].startsWith(`${day},`));
+  assert.match(csv[1], /^\d{4}-\d{2}-\d{2},Kodak Portra 400,35mm,C-TEC 41,C-41,1000 ml,5,Process temperature: 100°F; Push: \+1,Color developer,4:00,100°F,"test, ""quoted"""$/);
 });
 
 test('sanitizeLog drops malformed imports', () => {

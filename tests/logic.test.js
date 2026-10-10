@@ -192,8 +192,41 @@ test('formatDuration', () => {
 });
 
 test('working-solution shelf life', () => {
-  const e = batchExpiry(ctec, '2026-01-01T00:00:00Z');
-  assert.equal(e[0].date.toISOString().slice(0, 10), '2026-02-12');
-  assert.equal(e[1].date.toISOString().slice(0, 10), '2026-06-18');
+  const e = batchExpiry(ctec, '2026-01-01');
+  const day = (d) => d.toLocaleDateString('sv');
+  assert.equal(day(e[0].date), '2026-02-12');
+  assert.equal(day(e[1].date), '2026-06-18');
   assert.deepEqual(batchExpiry(KITS.unicolor, '2026-01-01'), []);
+});
+
+test('dates saved as YYYY-MM-DD are local calendar days in any time zone', async () => {
+  const { parseDay, addWeeks, daysUntil, localDay } = await import('../js/logic.js');
+  const d = parseDay('2026-10-03');
+  assert.deepEqual([d.getFullYear(), d.getMonth(), d.getDate(), d.getHours()], [2026, 9, 3, 0]);
+  assert.equal(localDay(addWeeks('2026-10-03', 1)), '2026-10-10');
+  const morning = new Date(2026, 9, 10, 8, 0); // local 8am
+  assert.equal(daysUntil('2026-10-10', morning), 0);
+  assert.equal(daysUntil('2026-10-09', morning), -1);
+  assert.equal(daysUntil('2026-10-11', morning), 1);
+  assert.ok(!Object.is(daysUntil('2026-10-10', morning), -0));
+  // Kodak keeps 1 week: mixed a week ago yesterday → expired today, wherever you are.
+  const exp = batchExpiry(KITS.kodake6, '2026-10-02');
+  assert.equal(daysUntil(exp[0].date, morning), -1);
+});
+
+test('small amounts keep a decimal', () => {
+  assert.equal(fmtVol(3.5, 'metric'), '3.5 ml');
+  assert.equal(fmtVol(24.8, 'metric'), '24.8 ml');
+  assert.equal(fmtVol(1187.5, 'metric'), '1188 ml');
+  assert.equal(fmtVol(10, 'metric'), '10 ml');
+  assert.equal(fmtVol(3.5, 'imperial'), '0.12 fl oz');
+  assert.equal(formatDuration(NaN), '');
+});
+
+test('Df96 pulls add a minute, Cs6 handles a missing tank volume', () => {
+  const df = KITS.df96;
+  assert.equal(run(df, { mixKey: '18oz', firstRoll: 1, mode: '80', push: '-1' }).steps[0].sec, 240);
+  assert.equal(run(df, { mixKey: '18oz', firstRoll: 1, mode: '75', push: '-0.5' }).steps[0].sec, 300);
+  const p = run(KITS.cs6, { mixKey: 'd6', firstRoll: 1, tankMl: undefined });
+  assert.ok(!p.error && !p.notes.some((n) => n.d9));
 });
