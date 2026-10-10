@@ -259,7 +259,9 @@ label textarea { resize: vertical; }
 .status { font-size: 13px; font-weight: 700; }
 .warn-text { color: var(--yellow); }
 .recent { list-style: none; margin: 0; padding: 0; }
-.recent li { padding: 6px 0; border-top: 1px solid var(--line); }
+.recent li { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); }
+.recent-film { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent-date { flex: none; font-variant-numeric: tabular-nums; }
 .recent li:first-child { border-top: 0; }
 .btn-row .hint { margin: 0; align-self: center; flex: 1; }
 
@@ -592,7 +594,7 @@ details.bath.complete .bath-no { background: var(--ok); }
 @media (prefers-reduced-motion: reduce) { .tabs .home-btn.pop .home-disc, .tabs .home-btn.pop svg { animation: none; } }
 
 /* ---------- Dashboard ---------- */
-.section-head { margin: 22px 4px 6px; }
+.section-head { margin: 22px 4px 6px; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .section-head .section-title { margin: 0; }
 .section-sub { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
 /* Intro card, with a stripe like the bottle label */
@@ -627,10 +629,9 @@ details.bath.complete .bath-no { background: var(--ok); }
 .next-up .btn { justify-self: start; margin-top: 6px; }
 /* Activity: stat tiles */
 .activity { display: grid; gap: 16px; }
-.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-@media (max-width: 400px) { .stats { grid-template-columns: repeat(2, 1fr); } }
-.stat { display: grid; gap: 2px; padding: 10px 12px; border-radius: 12px; background: #232129; border: 1px solid var(--line); }
-.stat-num { font-size: 30px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--text); }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+.stat { display: grid; gap: 0; padding: 8px 10px; border-radius: 12px; background: #232129; border: 1px solid var(--line); }
+.stat-num { font-size: 24px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--text); }
 .stat-label { font-size: 12px; color: var(--muted); }
 /* Activity: weekly bars (single series, baseline-anchored, rounded data end) */
 .chart-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0 0 8px; font-size: 14px; }
@@ -821,3 +822,19 @@ details.fold[open] > summary { margin-bottom: 8px; }
 .need.recommended { background: var(--violet-dim); color: var(--violet-bright); }
 .need.optional { border: 1px solid var(--line); color: var(--muted); }
 .intro .link-btn { display: block; margin: 10px auto 0; }
+
+/* ---------- Home: hero chemistry card ---------- */
+#tab-home > .section-head:first-child { margin-top: 12px; }
+.chem.hero { gap: 8px; border: 1px solid rgba(255, 184, 28, .55); background: linear-gradient(180deg, rgba(255, 184, 28, .08), rgba(255, 184, 28, 0) 60%), var(--card); }
+.chem.hero.spent { border-color: rgba(218, 41, 28, .6); background: var(--card); }
+.chem.hero .bar { margin: 2px 0; }
+.chem-next { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 10px 12px; border-radius: 12px; background: rgba(255, 255, 255, .04); }
+.chem-next b { font-size: 17px; font-variant-numeric: tabular-nums; }
+.chem.hero .btn-row { margin-top: 2px; }
+.empty-chem { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.empty-chem p { margin: 0; }
+.top-lists { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 4px; }
+.top-lists summary { cursor: pointer; padding: 8px 0; font-size: 14px; font-weight: 600; color: var(--violet-bright); list-style: none; }
+.top-lists summary::-webkit-details-marker { display: none; }
+.top-lists summary::after { content: ' ▾'; }
+.top-lists[open] summary::after { content: ' ▴'; }

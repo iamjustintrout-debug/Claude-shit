@@ -1606,34 +1606,36 @@ function chemCard(k, b) {
   const expDays = exp ? daysUntil(exp.date) : null;
   const status = left === 0 ? { text: 'Used up', cls: 'bad' }
     : expDays != null && expDays < 0 ? { text: 'Expired', cls: 'bad' }
-      : expDays != null && expDays <= 7 ? { text: 'Expiring soon', cls: 'warn-text' }
-        : { text: 'Active', cls: 'ok' };
+      : expDays != null && expDays <= 7 ? { text: `${expDays} d left`, cls: 'warn-text' }
+        : null;
 
+  // The next roll's developer step: the one thing you need before starting.
   let next = null;
   if (left > 0) {
     const prog = buildProgram(k, { ...kitOpts(k), mixKey: b.mixKey, firstRoll: b.rolls + 1, rolls: 1, tankMl: state.prefs.tankMl });
     const d = prog.steps?.find((x) => x.critical);
-    if (d) next = `Next: roll #${b.rolls + 1} · ${d.name} ${formatDuration(d.sec)} at ${T(d.temp)}`;
+    if (d) next = el('div', { className: 'chem-next' },
+      el('span', { className: 'next-label', textContent: `Next: roll #${b.rolls + 1}` }),
+      el('b', { textContent: `${formatDuration(d.sec)} at ${T(d.temp)}` }));
   }
+  const age = ageDays === 0 ? 'today' : `${ageDays} d ago`;
+  const useBy = exp && expDays >= 0 ? ` · use by ${shortDate(exp.date)}` : '';
 
-  const go = el('button', { className: 'btn primary small', textContent: left > 0 ? 'Develop' : 'Mix new batch' });
+  const go = el('button', { className: 'btn primary', textContent: left > 0 ? 'Start developing' : 'Mix new batch' });
   go.addEventListener('click', () => { selectKit(k.id); showTab(left > 0 ? 'develop' : 'mix'); });
-  const details = el('button', { className: 'btn small', textContent: 'Batch details' });
+  const details = el('button', { className: 'btn small', textContent: 'Details' });
   details.addEventListener('click', () => { selectKit(k.id); showTab('batch'); });
 
-  return el('div', { className: `card chem${k.id === state.kitId ? ' selected' : ''}` },
+  return el('div', { className: `card chem hero${left === 0 || (expDays != null && expDays < 0) ? ' spent' : ''}` },
     el('div', { className: 'chem-head' },
       el('div', {}, el('b', { textContent: k.name }), el('span', { className: 'chip', textContent: k.process })),
-      el('span', { className: `status ${status.cls}`, textContent: status.text })),
-    el('div', { className: 'hint', textContent: `${mix?.label ?? b.mixKey} · mixed ${fmtDate(b.mixedOn)} (${ageDays === 0 ? 'today' : `${ageDays} day${ageDays === 1 ? '' : 's'} ago`})` }),
+      status ? el('span', { className: `status ${status.cls}`, textContent: status.text }) : null),
+    el('div', { className: 'hint', textContent: `Mixed ${age}${useBy}` }),
     el('div', { className: 'chem-count' },
       el('span', { className: 'big-num', textContent: b.rolls }),
-      el('span', { className: 'hint', textContent: ` of ${cap} rolls developed · ${left} left` })),
+      el('span', { className: 'hint', textContent: ` / ${cap} rolls · ${left} left` })),
     el('div', { className: left === 0 ? 'bar full' : 'bar' }, el('div', { style: `width:${cap ? Math.min(100, (b.rolls / cap) * 100) : 0}%` })),
-    exp ? el('div', { className: 'roll-line', textContent: expDays < 0
-      ? `${exp.name} expired ${-expDays} day${expDays === -1 ? '' : 's'} ago`
-      : `Use ${exp.name.toLowerCase()} by ${fmtDate(exp.date)} (${expDays} day${expDays === 1 ? '' : 's'})` }) : null,
-    next ? el('div', { className: 'roll-line', textContent: next }) : null,
+    next,
     el('div', { className: 'btn-row' }, go, details));
 }
 
@@ -1644,20 +1646,19 @@ function selectKit(id) {
   renderAll();
 }
 
-// Section heading with a one-line explanation underneath.
-function sectionHead(title, sub) {
+// Section heading, with an optional link on the right.
+function sectionHead(title, action) {
   return el('div', { className: 'section-head' },
-    el('h2', { className: 'section-title', textContent: title }),
-    sub ? el('p', { className: 'section-sub', textContent: sub }) : null);
+    el('h2', { className: 'section-title', textContent: title }), action ?? null);
 }
 
 // Reuse the tab bar's icons so the dashboard and tabs match.
 const tabIcon = (tab) => document.querySelector(`.tabs [data-go="${tab}"] svg`)?.cloneNode(true) ?? null;
 
 const FLOW = [
-  { tab: 'mix', title: 'Mix', text: 'Make up working chemistry from your kit, with every amount worked out.' },
-  { tab: 'develop', title: 'Develop', text: 'A step-by-step timer for each bath that beeps when to agitate.' },
-  { tab: 'rolls', title: 'Log', text: 'Save each roll\'s film, times and photos to look back on.' },
+  { tab: 'mix', title: 'Mix', text: 'Your kit\'s chemistry, measured out' },
+  { tab: 'develop', title: 'Develop', text: 'Timed steps with agitation beeps' },
+  { tab: 'rolls', title: 'Log', text: 'Film, times and photos for each roll' },
 ];
 
 function flowSteps(compact) {
@@ -1672,37 +1673,16 @@ function flowSteps(compact) {
   }));
 }
 
-function introCard(isNew) {
-  if (isNew) {
-    const go = el('button', { className: 'btn primary wide', textContent: 'Get started: mix your chemistry' });
-    go.addEventListener('click', () => showTab('mix'));
-    return el('div', { className: 'card intro' },
-      el('h2', { textContent: 'Develop film at home, step by step' }),
-      el('p', { textContent: 'DevApp guides you through developing your own film: mixing the chemistry, timing every step, and keeping a record of each roll.' }),
-      flowSteps(false),
-      el('p', { className: 'hint', textContent: 'Tap Get started, choose the chemistry kit you have at the top of the Mix page, and follow the steps.' }),
-      go, gearLink());
-  }
-  return el('div', { className: 'card intro slim' },
-    el('p', { className: 'intro-tag', textContent: 'Your home film lab: mix, develop and log every roll.' }),
-    flowSteps(true));
+function introCard() {
+  const go = el('button', { className: 'btn primary wide', textContent: 'Mix your first chemistry' });
+  go.addEventListener('click', () => showTab('mix'));
+  return el('div', { className: 'card intro' },
+    el('h2', { textContent: 'Develop film at home' }),
+    el('p', { className: 'hint', textContent: 'Three steps, one roll at a time:' }),
+    flowSteps(false),
+    go, gearLink());
 }
 
-// The most useful next action, from your active chemistry.
-function nextUpCard(active) {
-  if (!active) return null;
-  const [id, b] = active;
-  const k = KITS[id];
-  const prog = buildProgram(k, { ...kitOpts(k), mixKey: b.mixKey, firstRoll: b.rolls + 1, rolls: 1, tankMl: state.prefs.tankMl });
-  const d = prog.steps?.find((x) => x.critical);
-  const go = el('button', { className: 'btn primary', textContent: 'Start developing' });
-  go.addEventListener('click', () => { selectKit(id); showTab('develop'); });
-  return el('div', { className: 'card next-up' },
-    el('span', { className: 'next-label', textContent: 'Next up' }),
-    el('b', { textContent: `Roll #${b.rolls + 1} in ${k.name}` }),
-    d ? el('span', { className: 'hint', textContent: `${d.name} ${formatDuration(d.sec)} at ${T(d.temp)}` }) : null,
-    go);
-}
 
 function statTile(value, label) {
   return el('div', { className: 'stat' }, el('span', { className: 'stat-num', textContent: value }), el('span', { className: 'stat-label', textContent: label }));
@@ -1748,23 +1728,18 @@ function countTable(title, rows, noun) {
 
 function activitySection() {
   const st = rollStats(rollLog);
-  const items = [sectionHead('Your activity', 'Rolls you\'ve developed and saved to your log.')];
-  if (!st.total) {
-    items.push(el('div', { className: 'card' }, el('p', { className: 'hint', textContent: 'Nothing logged yet. When you finish developing, tap "Save to roll log" and your counts show up here.' })));
-    return items;
-  }
-  items.push(el('div', { className: 'card activity' },
-    el('div', { className: 'stats' },
-      statTile(st.last7, 'last 7 days'), statTile(st.last30, 'last 30 days'),
-      statTile(st.year, `in ${new Date().getFullYear()}`), statTile(st.total, 'all time')),
-    weekChart(st.weeks),
+  if (!st.total) return [];
+  const thisWeek = st.weeks.at(-1).count;
+  const top = el('details', { className: 'top-lists' },
+    el('summary', { textContent: 'Top films & chemistry, last 30 days' }),
     st.last30
-      ? el('div', { className: 'count-tables' },
-        el('p', { className: 'chart-head' }, el('b', { textContent: 'Last 30 days' })),
-        countTable('Film', st.films30, 'films'),
-        countTable('Chemistry', st.kits30, 'kits'))
-      : el('p', { className: 'hint', textContent: 'No rolls in the last 30 days.' })));
-  return items;
+      ? el('div', { className: 'count-tables' }, countTable('Film', st.films30, 'films'), countTable('Chemistry', st.kits30, 'kits'))
+      : el('p', { className: 'hint', textContent: 'No rolls in the last 30 days.' }));
+  return [sectionHead('Activity'), el('div', { className: 'card activity' },
+    el('div', { className: 'stats' },
+      statTile(thisWeek, 'this week'), statTile(st.last30, '30 days'), statTile(st.total, 'all time')),
+    weekChart(st.weeks),
+    top)];
 }
 
 // Chips for switching between mixed chemistries; picking one also selects
@@ -1793,39 +1768,34 @@ function renderHome() {
   // Which chemistry the dashboard is about: the selected kit if it has a batch,
   // otherwise the first active one.
   const shown = entries.find(([id]) => id === state.kitId) ?? entries.find((e) => rank(e) === 0) ?? entries[0];
-  const shownActive = shown && rank(shown) === 0 ? shown : null;
 
-  const items = [introCard(isNew), nextUpCard(shownActive)];
-
-  items.push(sectionHead('Chemistry in use', entries.length > 1
-    ? 'You have more than one batch mixed. Pick one to see its details.'
-    : 'Your mixed batch: rolls developed, rolls left, and when it expires.'));
+  if (isNew) {
+    $('#tab-home').replaceChildren(introCard());
+    return;
+  }
+  const items = [sectionHead('Your chemistry')];
   if (entries.length > 1) items.push(chemSwitcher(entries, shown[0], rank));
   if (shown) {
     items.push(chemCard(KITS[shown[0]], shown[1]));
   } else {
-    const mixBtn = el('button', { className: 'btn primary wide', textContent: 'Mix chemistry' });
+    const mixBtn = el('button', { className: 'btn primary', textContent: 'Mix chemistry' });
     mixBtn.addEventListener('click', () => showTab('mix'));
-    items.push(el('div', { className: 'card' },
-      el('p', { textContent: 'No chemistry mixed yet. On the Mix page, choose your kit and mix a batch.' }), mixBtn));
+    items.push(el('div', { className: 'card empty-chem' },
+      el('p', { className: 'hint', textContent: 'No chemistry mixed right now.' }), mixBtn));
   }
 
-  if (!isNew) items.push(...activitySection());
+  items.push(...activitySection());
 
-  if (!isNew) {
-    const recent = sortedLog().slice(0, 3);
-    const all = el('button', { className: 'btn small', textContent: 'All rolls' });
+  const recent = sortedLog().slice(0, 3);
+  if (recent.length) {
+    const all = el('button', { type: 'button', className: 'link-btn', textContent: `All ${rollLog.length} →` });
     all.addEventListener('click', () => showTab('rolls'));
-    items.push(sectionHead('Recent rolls', 'The last rolls you saved, newest first.'),
-      el('div', { className: 'card' },
-        recent.length
-          ? el('ul', { className: 'recent' }, ...recent.map((e) => el('li', {},
-            el('b', { textContent: e.film.name }),
-            el('span', { className: 'hint', textContent: ` ${e.format ? `${e.format} · ` : ''}${fmtDate(e.date)} · ${e.kitName}` }))))
-          : el('p', { className: 'hint', textContent: 'No rolls logged yet.' }),
-        el('div', { className: 'btn-row' }, el('span', { className: 'hint', textContent: `${rollLog.length} roll${rollLog.length === 1 ? '' : 's'} in your log` }), all)));
+    items.push(sectionHead('Recent rolls', all),
+      el('div', { className: 'card' }, el('ul', { className: 'recent' }, ...recent.map((e) => el('li', {},
+        el('span', { className: 'recent-film' }, el('b', { textContent: e.film.name }), e.format ? el('span', { className: 'hint', textContent: ` ${e.format}` }) : null),
+        el('span', { className: 'hint recent-date', textContent: shortDate(e.date) }))))));
   }
-  $('#tab-home').replaceChildren(...items.filter(Boolean));
+  $('#tab-home').replaceChildren(...items);
 }
 
 // ---------- Settings ----------

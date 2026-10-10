@@ -2,10 +2,10 @@
 
 A phone app for mixing film-developing chemistry and timing the process.
 
-It opens to a **dashboard** that explains the Mix → Develop → Log flow, shows what to do next, counts
-your recent rolls (last 7 / 30 days, this year, all time, rolls per week, top films and kits), and
-lists your mixed chemistry: rolls developed, rolls left, mix date, use-by
-date and the next roll's developer time. Tap the raised Home button in the middle of the tab bar to return to it. Reopening the app
+It opens to a **dashboard**. New users see the Mix → Develop → Log flow and a button to start.
+After that it leads with your chemistry (rolls used and left, use-by date, the next roll's developer
+time and a Start button), then a compact activity summary (this week, 30 days, all time, rolls per
+week, with top films and kits folded away) and your 3 most recent rolls. Tap the raised Home button in the middle of the tab bar to return to it. Reopening the app
 while it's still open returns to where you were, and a timer that was running carries on.
 
 Pick your chemistry kit at the top of Develop, Batch, Mix or Guide (or tap a batch on the dashboard), and
